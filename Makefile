@@ -4,10 +4,10 @@ libutp:
 	$(MAKE) -C libutp
 
 utp.cmo: utp.ml
-	ocamlc -c utp.ml
+	ocamlfind ocamlc -package lwt.unix -c utp.ml
 
 utp.cmx: utp.ml
-	ocamlopt -c utp.ml
+	ocamlfind ocamlopt -package lwt.unix -c utp.ml
 
 utpstubs.o: utpstubs.c libutp
 	ocamlopt -o utpstubs.o -ccopt -fPIC utpstubs.c
