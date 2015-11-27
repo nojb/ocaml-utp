@@ -112,3 +112,7 @@ let on_state_change sock st =
   match st with
   | STATE_WRITABLE ->
       write_data sock
+
+let () =
+  Callback.register "caml_utp_on_read" on_read;
+  Callback.register "caml_utp_on_state_change" on_state_change
