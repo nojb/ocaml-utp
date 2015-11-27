@@ -1,3 +1,5 @@
+#include <assert.h>
+
 #include <caml/mlvalues.h>
 #include <caml/memory.h>
 #include <caml/callback.h>
@@ -14,6 +16,25 @@ static uint64 utp_on_read (utp_callback_arguments* a)
 
 static uint64 utp_on_state_change (utp_callback_arguments *a)
 {
+  int state;
+  switch (a->state) {
+  case UTP_STATE_CONNECT:
+    state = 0;
+    break;
+  case UTP_STATE_WRITABLE:
+    state = 1;
+    break;
+  case UTP_STATE_EOF:
+    state = 2;
+    break;
+  case UTP_STATE_DESTROYING:
+    state = 3;
+    break;
+  default:
+    state = -1; /* CANT HAPPEN */
+    break;
+  }
+  caml_callback2(*caml_named_value("caml_utp_on_state_change"), (value)a->socket, Val_int(state));
   return 0;
 }
 
