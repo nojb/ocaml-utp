@@ -29,9 +29,8 @@ nativelib: utp.cmx
 	$(OCAMLMKLIB) -o utp utp.cmx -lutp -Llibutp
 
 clean:
-	rm -f utp.cmo utp.cmx utp.cma utp.cmxa utp.cmi utp.a
-	rm -f utpstubs.o dllutpstubs.so libutpstubs.a
-	rm -f *.o
+	rm -f *.cmo *.cmx *.cma *.cmxa *.cmi *.a *.o
+	rm -f dllutpstubs.so
 
 full_clean: clean
 	$(MAKE) -C libutp clean
