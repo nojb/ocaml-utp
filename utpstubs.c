@@ -3,10 +3,19 @@
 
 #include "libutp/utp.h"
 
-utp_context *__ctx = utp_init (2);
-
-CAMLprim value caml_utp_create_socket (value unit)
+CAMLprim value caml_utp_init (value version)
 {
-  utp_socket *sock = utp_create_socket (__ctx);
-  CAMLreturn ((value)sock);
+  return (value)utp_init(Int_val(version));
+}
+
+CAMLprim value caml_utp_destroy (value ctx)
+{
+  utp_destroy ((utp_context *)ctx);
+  return Val_unit;
+}
+
+CAMLprim value caml_utp_create_socket (value ctx)
+{
+  utp_socket *sock = utp_create_socket ((utp_context *)ctx);
+  return (value)sock;
 }
