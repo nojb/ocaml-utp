@@ -10,7 +10,7 @@ utp.cmx: utp.ml
 	ocamlopt -c utp.ml
 
 utpstubs.o: utpstubs.c libutp
-	ocamlopt -o utpstubs.o utpstubs.c
+	ocamlopt -o utpstubs.o -ccopt -fPIC utpstubs.c
 
 clib: utpstubs.o
 	ocamlmklib -o utpstubs utpstubs.o -lutp -Llibutp
