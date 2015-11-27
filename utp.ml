@@ -12,16 +12,16 @@
 
 (* end *)
 
-(* type context *)
-(* type socket *)
-
-(* external utp_init : int -> utp_context = "caml_utp_init" *)
-(* external utp_create_socket : context -> socket = "caml_utp_create_socket" *)
-(* external *)
-
+type utp_context
 type utp_socket
 
+external utp_init : int -> utp_context = "caml_utp_init"
+external utp_destroy : utp_context -> unit = "caml_utp_destroy"
 external utp_create_socket : unit -> utp_socket = "caml_utp_create_socket"
+external utp_write : utp_socket -> bytes -> int -> int -> int = "caml_utp_write"
+external utp_read_drained : utp_socket -> unit = "caml_utp_read_drained"
+external utp_issue_deferred_acks : utp_context -> unit = "caml_utp_issue_deferred_acks"
+external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
 
 type socket =
   {
@@ -50,6 +50,13 @@ let read sock wbuf woff wlen =
     Queue.push sock.to_read (wbuf, woff, wlen);
     Lwt.add_task_l sock.readers
   end
+
+let network_loop sock =
+  if Lwt.readable sock.file_descr then
+    Lwt_unix.recvfrom ... >>= fun buf ->
+    utp_process_udp ctx socket_data
+  else
+    utp_issue_deferred_acks ctx
 
 let write sock buf off len =
   Queue.push sock.to_write (buf, off, len);
