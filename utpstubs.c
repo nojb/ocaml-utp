@@ -7,7 +7,7 @@
 
 static uint64 utp_on_read (utp_callback_arguments* a)
 {
-  value ba = caml_ba_alloc (CAML_BA_UINT8, 1, (void *)a->buf, &(a->len));
+  value ba = caml_ba_alloc (CAML_BA_UINT8, 1, (void *)a->buf, (intnat *) &(a->len));
   caml_callback2 (*caml_named_value ("caml_utp_on_read"), (value)a->socket, ba);
   return 0;
 }
@@ -15,6 +15,11 @@ static uint64 utp_on_read (utp_callback_arguments* a)
 static uint64 utp_on_state_change (utp_callback_arguments *a)
 {
   return 0;
+}
+
+CAMLprim value caml_utp_get_userdata (value sock)
+{
+  return *(value *)(utp_get_userdata((utp_socket *)sock));
 }
 
 CAMLprim value caml_utp_init (value version)
@@ -31,8 +36,12 @@ CAMLprim value caml_utp_destroy (value ctx)
   return Val_unit;
 }
 
-CAMLprim value caml_utp_create_socket (value ctx)
+CAMLprim value caml_utp_create_socket (value ctx, value data)
 {
   utp_socket *sock = utp_create_socket ((utp_context *)ctx);
+  value *userdata = malloc (sizeof (value));
+  *userdata = data;
+  caml_register_generational_global_root(userdata);
+  utp_set_userdata(sock, userdata);
   return (value)sock;
 }

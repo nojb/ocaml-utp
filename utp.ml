@@ -13,22 +13,22 @@
 (* end *)
 
 type utp_context
-type utp_socket
+type 'a utp_socket
 
 external utp_init : int -> utp_context = "caml_utp_init"
 external utp_destroy : utp_context -> unit = "caml_utp_destroy"
-external utp_create_socket : unit -> utp_socket = "caml_utp_create_socket"
-external utp_write : utp_socket -> bytes -> int -> int -> int = "caml_utp_write"
-external utp_read_drained : utp_socket -> unit = "caml_utp_read_drained"
+external utp_create_socket : 'a -> 'a utp_socket = "caml_utp_create_socket"
+external utp_get_userdata : 'a utp_socket -> 'a = "caml_utp_get_userdata"
+external utp_write : 'a utp_socket -> bytes -> int -> int -> int = "caml_utp_write"
+external utp_read_drained : 'a utp_socket -> unit = "caml_utp_read_drained"
 external utp_issue_deferred_acks : utp_context -> unit = "caml_utp_issue_deferred_acks"
 external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
 external utp_process_udp : utp_context -> Lwt_bytes.t -> int -> Unix.sockaddr -> int = "caml_utp_process_udp"
 
-type socket =
+type user_data =
   {
     file_descr : Lwt_unix.file_descr;
     ctx : utp_context;
-    sock : utp_socket;
     mutable read_buf : Lwt_bytes.t;
     to_read : (bytes * int * int) Queue.t;
     readers : int Lwt.u Lwt_sequence.t;
@@ -36,23 +36,26 @@ type socket =
     writers : int Lwt.u Lwt_sequence.t;
   }
 
+type sock
+
 let null = Lwt_bytes.create 0
 
 let read sock wbuf woff wlen =
-  let len = Lwt_bytes.length sock.read_buf in
-  if Queue.is_empty sock.to_read && len > 0 then begin
+  let userdata = utp_get_userdata sock in
+  let len = Lwt_bytes.length userdata.read_buf in
+  if Queue.is_empty userdata.to_read && len > 0 then begin
     let n = min len wlen in
-    Lwt_bytes.blit_to_bytes sock.read_buf 0 wbuf woff n;
+    Lwt_bytes.blit_to_bytes userdata.read_buf 0 wbuf woff n;
     if n < len then
-      sock.read_buf <- Lwt_bytes.proxy sock.read_buf n (len - n)
+      userdata.read_buf <- Lwt_bytes.proxy userdata.read_buf n (len - n)
     else begin
-      sock.read_buf <- null;
-      utp_read_drained sock.sock;
+      userdata.read_buf <- null;
+      utp_read_drained sock;
     end;
     Lwt.return n
   end else begin
-    Queue.push (wbuf, woff, wlen) sock.to_read;
-    Lwt.add_task_l sock.readers
+    Queue.push (wbuf, woff, wlen) userdata.to_read;
+    Lwt.add_task_l userdata.readers
   end
 
 let network_loop sock =
@@ -71,34 +74,36 @@ let write sock buf off len =
   Lwt.add_task_l sock.writers
 
 let on_read sock buf =
-  assert (Lwt_bytes.length sock.read_buf = 0);
-  if Queue.is_empty sock.to_read then
-    sock.read_buf <- buf
+  let userdata = utp_get_userdata sock in
+  assert (Lwt_bytes.length userdata.read_buf = 0);
+  if Queue.is_empty userdata.to_read then
+    userdata.read_buf <- buf
   else begin
     let off = ref 0 in
     let len = ref (Lwt_bytes.length buf) in
-    while 0 < !len && Queue.length sock.to_read > 0 do
-      let wbuf, woff, wlen = Queue.take sock.to_read in
+    while 0 < !len && Queue.length userdata.to_read > 0 do
+      let wbuf, woff, wlen = Queue.take userdata.to_read in
       let n = min !len wlen in
       Lwt_bytes.blit_to_bytes buf 0 wbuf woff n;
       off := !off + n;
       len := !len - n;
-      Lwt.wakeup_later (Lwt_sequence.take_r sock.readers) n;
+      Lwt.wakeup_later (Lwt_sequence.take_r userdata.readers) n;
     done;
     if 0 < !len then
-      sock.read_buf <- Lwt_bytes.proxy buf !off !len
+      userdata.read_buf <- Lwt_bytes.proxy buf !off !len
     else
-      utp_read_drained sock.sock
+      utp_read_drained sock
   end
 
 let write_data sock =
+  let userdata = utp_get_userdata sock in
   let n = ref max_int in
-  while 0 < !n && 0 < Queue.length sock.to_write do
-    let wbuf, woff, wlen = Queue.top sock.to_write in
-    n := utp_write sock.sock wbuf woff wlen;
+  while 0 < !n && 0 < Queue.length userdata.to_write do
+    let wbuf, woff, wlen = Queue.top userdata.to_write in
+    n := utp_write sock wbuf woff wlen;
     if 0 < !n then begin
-      ignore (Queue.pop sock.to_write);
-      Lwt.wakeup_later (Lwt_sequence.take_r sock.writers) !n
+      ignore (Queue.pop userdata.to_write);
+      Lwt.wakeup_later (Lwt_sequence.take_r userdata.writers) !n
     end
   done
 
