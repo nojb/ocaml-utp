@@ -1,29 +1,37 @@
+OCAMLFIND = ocamlfind
+OCAMLC = ocamlc
+OCAMLOPT = ocamlopt
+OCAMLMKLIB = ocamlmklib
+CC = cc
+CFLAGS = -fPIC -I/usr/local/lib/ocaml/
+
 all: clib bytelib nativelib
 
 libutp:
 	$(MAKE) -C libutp
 
 utp.cmo: utp.ml
-	ocamlfind ocamlc -package lwt.unix -c utp.ml
+	$(OCAMLFIND) $(OCAMLC) -package lwt.unix -c utp.ml
 
 utp.cmx: utp.ml
-	ocamlfind ocamlopt -package lwt.unix -c utp.ml
+	$(OCAMLFIND) $(OCAMLOPT) -package lwt.unix -c utp.ml
 
-utpstubs.o: utpstubs.c libutp
-	ocamlopt -o utpstubs.o -ccopt -fPIC utpstubs.c
+%.o: %.c
+	$(CC) $(CFLAGS) -o $@ -c $<
 
-clib: utpstubs.o
-	ocamlmklib -o utpstubs utpstubs.o -lutp -Llibutp
+clib: utpstubs.o socketaddr.o unixsupport.o
+	$(OCAMLMKLIB) -o utpstubs socketaddr.o utpstubs.o unixsupport.o -lutp -Llibutp
 
 bytelib: utp.cmo
-	ocamlmklib -o utp utp.cmo -lutp -Llibutp
+	$(OCAMLMKLIB) -o utp utp.cmo -lutp -Llibutp
 
 nativelib: utp.cmx
-	ocamlmklib -o utp utp.cmx -lutp -Llibutp
+	$(OCAMLMKLIB) -o utp utp.cmx -lutp -Llibutp
 
 clean:
-	rm -f utp.cmo utp.cmx utp.cma utp.cmxa utp.o utp.cmi utp.a
+	rm -f utp.cmo utp.cmx utp.cma utp.cmxa utp.cmi utp.a
 	rm -f utpstubs.o dllutpstubs.so libutpstubs.a
+	rm -f *.o
 
 full_clean: clean
 	$(MAKE) -C libutp clean

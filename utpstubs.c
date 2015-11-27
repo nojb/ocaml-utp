@@ -7,14 +7,16 @@
 
 #include "libutp/utp.h"
 
-static uint64 utp_on_read (utp_callback_arguments* a)
+#include "socketaddr.h"
+
+static uint64 utp_on_read(utp_callback_arguments* a)
 {
-  value ba = caml_ba_alloc (CAML_BA_UINT8, 1, (void *)a->buf, (intnat *) &(a->len));
-  caml_callback2 (*caml_named_value ("caml_utp_on_read"), (value)a->socket, ba);
+  value ba = caml_ba_alloc_dims(CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *)a->buf, a->len);
+  caml_callback2 (*caml_named_value("caml_utp_on_read"), (value)a->socket, ba);
   return 0;
 }
 
-static uint64 utp_on_state_change (utp_callback_arguments *a)
+static uint64 utp_on_state_change(utp_callback_arguments *a)
 {
   int state;
   switch (a->state) {
@@ -38,29 +40,50 @@ static uint64 utp_on_state_change (utp_callback_arguments *a)
   return 0;
 }
 
-CAMLprim value caml_utp_get_userdata (value sock)
+CAMLprim value caml_utp_get_userdata(value sock)
 {
   return *(value *)(utp_get_userdata((utp_socket *)sock));
 }
 
-CAMLprim value caml_utp_init (value version)
+CAMLprim value caml_utp_init(value version)
 {
-  utp_context *ctx = utp_init(Int_val(version));
-  utp_set_callback (ctx, UTP_ON_READ, utp_on_read);
-  utp_set_callback (ctx, UTP_ON_STATE_CHANGE, utp_on_state_change);
+  utp_context *ctx =utp_init(Int_val(version));
+  utp_set_callback(ctx, UTP_ON_READ, utp_on_read);
+  utp_set_callback(ctx, UTP_ON_STATE_CHANGE, utp_on_state_change);
   return (value)ctx;
 }
 
-CAMLprim value caml_utp_destroy (value ctx)
+CAMLprim value caml_utp_destroy(value ctx)
 {
-  utp_destroy ((utp_context *)ctx);
+  utp_destroy((utp_context *)ctx);
   return Val_unit;
 }
 
-CAMLprim value caml_utp_create_socket (value ctx, value data)
+CAMLprim value caml_utp_read_drained(value sock)
 {
-  utp_socket *sock = utp_create_socket ((utp_context *)ctx);
-  value *userdata = malloc (sizeof (value));
+  utp_read_drained((utp_socket *)sock);
+  return Val_unit;
+}
+
+CAMLprim value caml_utp_issue_deferred_acks(value ctx)
+{
+  utp_issue_deferred_acks((utp_context *)ctx);
+  return Val_unit;
+}
+
+CAMLprim value caml_utp_process_udp(value ctx, value buf, value len, value sa)
+{
+  union sock_addr_union addr;
+  socklen_param_type addr_len;
+  get_sockaddr(sa, &addr, &addr_len);
+  int n = utp_process_udp((utp_context *)ctx, Caml_ba_data_val(buf), Int_val(len), &addr.s_gen, addr_len);
+  return Val_int(n);
+}
+
+CAMLprim value caml_utp_create_socket(value ctx, value data)
+{
+  utp_socket *sock = utp_create_socket((utp_context *)ctx);
+  value *userdata = malloc(sizeof (value));
   *userdata = data;
   caml_register_generational_global_root(userdata);
   utp_set_userdata(sock, userdata);
