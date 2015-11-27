@@ -1,16 +1,24 @@
-(* module type S = sig *)
+(* The MIT License (MIT)
 
-(*   type context *)
-(*   type socket *)
+   Copyright (c) 2015 Nicolas Ojeda Bar <n.oje.bar@gmail.com>
 
-(*   val init : int -> context *)
-(*   val socket : context -> socket *)
-(*   val connect : socket -> Unix.sockaddr -> unit Lwt.t *)
-(*   val write : socket -> bytes -> int -> int -> unit Lwt.t *)
-(*   val write_string : socket -> string -> int -> int -> unit Lwt.t *)
-(*   val read : socket -> bytes -> int -> int -> unit Lwt.t *)
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
 
-(* end *)
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE. *)
 
 type utp_context
 type 'a utp_socket
@@ -70,8 +78,9 @@ let network_loop sock =
   loop ()
 
 let write sock buf off len =
-  Queue.push (buf, off, len) sock.to_write;
-  Lwt.add_task_l sock.writers
+  let info = utp_get_userdata sock in
+  Queue.push (buf, off, len) info.to_write;
+  Lwt.add_task_l info.writers
 
 let on_read sock buf =
   let userdata = utp_get_userdata sock in

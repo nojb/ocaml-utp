@@ -10,11 +10,11 @@ all: clib bytelib nativelib
 libutp:
 	$(MAKE) -C libutp
 
-utp.cmo: utp.ml
-	$(OCAMLFIND) $(OCAMLC) -package lwt.unix -c utp.ml
+utp.cmo: utp.mli utp.ml
+	$(OCAMLFIND) $(OCAMLC) -package lwt.unix -c utp.mli utp.ml
 
-utp.cmx: utp.ml
-	$(OCAMLFIND) $(OCAMLOPT) -package lwt.unix -c utp.ml
+utp.cmx: utp.mli utp.ml
+	$(OCAMLFIND) $(OCAMLOPT) -package lwt.unix -c utp.mli utp.ml
 
 %.o: %.c
 	$(CC) $(CFLAGS) -o $@ -c $<
