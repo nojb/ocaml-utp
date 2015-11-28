@@ -119,6 +119,21 @@ CAMLprim value caml_utp_connect(value sock, value addr)
   return Val_unit;
 }
 
+CAMLprim value caml_utp_write(value sock, value buf, value off, value len)
+{
+  CAMLparam4(sock, buf, off, len);
+
+  utp_socket *utp_sock;
+  ssize_t written;
+  void *utp_buf;
+
+  utp_buf = String_val(buf) + Int_val(off);
+  utp_sock = (utp_socket *)sock;
+  written = utp_write(utp_sock, utp_buf, Int_val(len));
+
+  CAMLreturn(Val_int(written));
+}
+
 CAMLprim value caml_utp_check_timeouts(value ctx)
 {
   utp_context* utp_ctx = (utp_context*)ctx;

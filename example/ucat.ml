@@ -62,7 +62,9 @@ let anon_fun =
 let main () =
   Arg.parse spec anon_fun usage_msg;
   if !o_listen && (!o_remote_port <> 0 || !o_remote_address <> "") then raise Exit;
-  if not !o_listen && (!o_remote_port = 0 || !o_remote_address = "") then raise Exit
+  if not !o_listen && (!o_remote_port = 0 || !o_remote_address = "") then raise Exit;
+  let sock = Utp.socket () in
+  ()
 
 let () =
   try
