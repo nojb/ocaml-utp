@@ -5,7 +5,7 @@
 #include <caml/callback.h>
 #include <caml/bigarray.h>
 
-#include "libutp/utp.h"
+#include "utp.h"
 
 #include "socketaddr.h"
 
