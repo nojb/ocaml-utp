@@ -107,10 +107,28 @@ let network_loop ctx =
   in
   loop ()
 
+let () =
+  Lwt.ignore_result (network_loop the_context)
+
 let write sock buf off len =
   let info = utp_get_userdata sock in
   Queue.push (buf, off, len) info.to_write;
   Lwt.add_task_l info.writers
+
+type error =
+  | ECONNREFUSED
+  | ECONNRESET
+  | ETIMEDOUT
+
+let on_error sock err =
+  let info = utp_get_userdata sock in
+  match err with
+  | ECONNREFUSED ->
+      Lwt.wakeup_exn info.connected (Failure "connection refused")
+  | ECONNRESET ->
+      prerr_endline "ECONNRESET"
+  | ETIMEDOUT ->
+      prerr_endline "ETIMEDOUT"
 
 let on_read sock buf =
   let userdata = utp_get_userdata sock in
@@ -163,4 +181,5 @@ let on_state_change sock st =
 
 let () =
   Callback.register "caml_utp_on_read" on_read;
-  Callback.register "caml_utp_on_state_change" on_state_change
+  Callback.register "caml_utp_on_state_change" on_state_change;
+  Callback.register "caml_utp_on_error" on_error

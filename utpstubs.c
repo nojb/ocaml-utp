@@ -40,6 +40,24 @@ static uint64 utp_on_state_change(utp_callback_arguments *a)
   return 0;
 }
 
+static uint64 utp_on_error(utp_callback_arguments *a)
+{
+  int i;
+  switch (a->error_code) {
+  case UTP_ECONNREFUSED:
+    i = 0;
+    break;
+  case UTP_ECONNRESET:
+    i = 1;
+    break;
+  case UTP_ETIMEDOUT:
+    i = 2;
+    break;
+  }
+  caml_callback2(*caml_named_value("caml_utp_on_error"), (value)a->socket, Val_int(i));
+  return 0;
+}
+
 CAMLprim value caml_utp_get_userdata(value sock)
 {
   return *(value *)(utp_get_userdata((utp_socket *)sock));
