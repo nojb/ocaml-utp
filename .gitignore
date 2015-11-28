@@ -1,6 +1,4 @@
-utpstubs.o
 dllutpstubs.so
-libutpstubs.a
 *.a
 *.cma
 *.o
