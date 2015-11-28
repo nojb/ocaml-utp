@@ -308,8 +308,14 @@ void uerror(char *cmdname, value cmdarg)
   unix_error(errno, cmdname, cmdarg);
 }
 
+#include <string.h>
+
+extern int caml_string_is_c_safe (value s)
+{
+  return strlen(String_val(s)) == caml_string_length(s);
+}
+
 void caml_unix_check_path(value path, char * cmdname)
 {
   if (! caml_string_is_c_safe(path)) unix_error(ENOENT, cmdname, path);
 }
-

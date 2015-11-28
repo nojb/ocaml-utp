@@ -1,34 +1,22 @@
 OCAMLFIND = ocamlfind
 OCAMLC = ocamlc
 OCAMLOPT = ocamlopt
-OCAMLMKLIB = ocamlmklib
-CC = cc
 LIBUTP_DIR = ../libutp
-OCAML_DIR = `ocamlfind printconf stdlib`
-CFLAGS = -fPIC -I$(OCAML_DIR) -I$(LIBUTP_DIR)
-LWT_DIR = `ocamlfind query lwt.unix`
+LIBUTP_OBJS = utp_internal.o utp_utils.o utp_hash.o utp_callbacks.o utp_api.o utp_packedsockaddr.o
 
-all: utp.cma utp.cmxa utpstubs.a
+lib: utp.cmo utp.cmx utpstubs.o socketaddr.o unixsupport.o $(addprefix $(LIBUTP_DIR)/,$(LIBUTP_OBJS))
+	$(OCAMLFIND) ocamlmklib -package lwt.unix -o utp -cclib -lstdc++ $^
 
 utp.cmo: utp.mli utp.ml
-	$(OCAMLC) -o $@ -I $(LWT_DIR) -c $^
-
-utp.cma: utp.cmo
-	$(OCAMLC) -a -o $@ -I $(LWT_DIR) -cclib -lstdc++ -custom $^
+	$(OCAMLFIND) ocamlc -package lwt.unix -c $^
 
 utp.cmx: utp.mli utp.ml
-	$(OCAMLOPT) -I $(LWT_DIR) -c $^
-
-utp.cmxa: utp.cmx utpstubs.a
-	$(OCAMLOPT) -a -o $@ -cclib -lstdc++ $^
+	$(OCAMLFIND) ocamlopt -package lwt.unix -c $^
 
 %.o: %.c
-	$(CC) $(CFLAGS) -o $@ -c $<
-
-utpstubs.a: utpstubs.o socketaddr.o unixsupport.o
-	ar rcs $@ $^
+	ocamlopt -ccopt -I -ccopt $(LIBUTP_DIR) -o $@ -c $<
 
 clean:
-	rm -f *.cmo *.cmx *.cma *.cmxa *.cmi *.a *.o
+	rm -f *.cmo *.cmx *.cma *.cmxa *.cmi *.a *.o *.so
 
 .PHONY: clean

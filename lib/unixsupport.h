@@ -43,6 +43,8 @@ extern void caml_unix_check_path(value path, char * cmdname);
 
 extern char ** cstringvect(value arg, char * cmdname);
 
+extern int caml_string_is_c_safe(value);
+
 #ifdef __cplusplus
 }
 #endif

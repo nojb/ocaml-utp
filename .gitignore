@@ -1,4 +1,4 @@
-dllutpstubs.so
+*.so
 *.a
 *.cma
 *.o
