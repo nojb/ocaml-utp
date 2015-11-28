@@ -44,6 +44,7 @@ external utp_issue_deferred_acks : utp_context -> unit = "caml_utp_issue_deferre
 external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
 external utp_process_udp : utp_context -> Lwt_bytes.t -> int -> Unix.sockaddr -> int = "caml_utp_process_udp"
 external utp_connect : utp_socket -> Unix.sockaddr -> unit = "caml_utp_connect"
+external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
 
 let the_socket = Lwt_unix.socket Lwt_unix.PF_INET Lwt_unix.SOCK_DGRAM 0
 
@@ -72,9 +73,16 @@ let read sock wbuf woff wlen =
     Lwt.add_task_l userdata.readers
   end
 
+let rec check_timeouts ctx =
+  let open Lwt.Infix in
+  Lwt_unix.sleep 0.5 >>= fun () ->
+  utp_check_timeouts ctx;
+  check_timeouts ctx
+
 let network_loop ctx =
   let open Lwt.Infix in
   let socket_data = Lwt_bytes.create 4096 in
+  Lwt.ignore_result (check_timeouts ctx);
   let rec loop () =
     Lwt_bytes.recvfrom the_socket socket_data 0 4096 [] >>= fun (n, sa) ->
     let _ : int = utp_process_udp ctx socket_data n sa in

@@ -99,3 +99,10 @@ CAMLprim value caml_utp_connect(value sock, value addr)
   utp_connect(utp_sock, &sock_addr.s_gen, addr_len);
   return Val_unit;
 }
+
+CAMLprim value caml_utp_check_timeouts(value ctx)
+{
+  utp_context* utp_ctx = (utp_context*)ctx;
+  utp_check_timeouts(utp_ctx);
+  return Val_unit;
+}
