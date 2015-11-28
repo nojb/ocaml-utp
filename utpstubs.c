@@ -89,3 +89,13 @@ CAMLprim value caml_utp_create_socket(value ctx, value data)
   utp_set_userdata(sock, userdata);
   return (value)sock;
 }
+
+CAMLprim value caml_utp_connect(value sock, value addr)
+{
+  utp_socket* utp_sock = (utp_socket*)sock;
+  union sock_addr_union sock_addr;
+  socklen_param_type addr_len;
+  get_sockaddr(addr, &sock_addr, &addr_len);
+  utp_connect(utp_sock, &sock_addr.s_gen, addr_len);
+  return Val_unit;
+}

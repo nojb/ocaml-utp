@@ -25,8 +25,8 @@ type utp_socket
 
 type user_data =
   {
-    file_descr : Lwt_unix.file_descr;
-    ctx : utp_context;
+    connected : unit Lwt.u;
+    connecting : unit Lwt.t;
     mutable read_buf : Lwt_bytes.t;
     to_read : (bytes * int * int) Queue.t;
     readers : int Lwt.u Lwt_sequence.t;
@@ -43,6 +43,14 @@ external utp_read_drained : utp_socket -> unit = "caml_utp_read_drained"
 external utp_issue_deferred_acks : utp_context -> unit = "caml_utp_issue_deferred_acks"
 external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
 external utp_process_udp : utp_context -> Lwt_bytes.t -> int -> Unix.sockaddr -> int = "caml_utp_process_udp"
+external utp_connect : utp_socket -> Unix.sockaddr -> unit = "caml_utp_connect"
+
+let the_socket = Lwt_unix.socket Lwt_unix.PF_INET Lwt_unix.SOCK_DGRAM 0
+
+let connect sock addr =
+  let info = utp_get_userdata sock in
+  utp_connect sock addr;
+  info.connecting
 
 let null = Lwt_bytes.create 0
 
@@ -64,13 +72,13 @@ let read sock wbuf woff wlen =
     Lwt.add_task_l userdata.readers
   end
 
-let network_loop sock =
+let network_loop ctx =
   let open Lwt.Infix in
   let socket_data = Lwt_bytes.create 4096 in
   let rec loop () =
-    Lwt_bytes.recvfrom sock.file_descr socket_data 0 4096 [] >>= fun (n, sa) ->
-    let _ : int = utp_process_udp sock.ctx socket_data n sa in
-    if not (Lwt_unix.readable sock.file_descr) then utp_issue_deferred_acks sock.ctx;
+    Lwt_bytes.recvfrom the_socket socket_data 0 4096 [] >>= fun (n, sa) ->
+    let _ : int = utp_process_udp ctx socket_data n sa in
+    if not (Lwt_unix.readable the_socket) then utp_issue_deferred_acks ctx;
     loop ()
   in
   loop ()
@@ -121,7 +129,11 @@ type state =
   | STATE_DESTROYING
 
 let on_state_change sock st =
+  let info = utp_get_userdata sock in
   match st with
+  | STATE_CONNECT ->
+      Lwt.wakeup info.connected ();
+      write_data sock
   | STATE_WRITABLE ->
       write_data sock
 
