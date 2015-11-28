@@ -20,23 +20,25 @@
    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE. *)
 
-let debug_mode = ref 0
-let listen_mode = ref false
-let local_port = ref 0
-let source_ip = ref "0.0.0.0"
-let buffer_size = ref 4096
-let do_not_resolve_hostnames = ref false
+let o_debug = ref 0
+let o_listen = ref false
+let o_local_port = ref 0
+let o_local_address = ref "0.0.0.0"
+let o_buf_size = ref 4096
+let o_numeric = ref false
+let o_remote_port = ref 0
+let o_remote_address = ref ""
 
 let spec =
   let open Arg in
   align
     [
-      "-d", Unit (fun () -> incr debug_mode), "Debug mode; use multiple times to increase verbosity";
-      "-l", Set listen_mode, "Listen mode";
-      "-p", Set_int local_port, "Local port";
-      "-s", Set_string source_ip, "Source IP";
-      "-B", Set_int buffer_size, "Buffer size";
-      "-n", Set do_not_resolve_hostnames, "Don't resolve hostnames";
+      "-d", Unit (fun () -> incr o_debug), "Debug mode; use multiple times to increase verbosity";
+      "-l", Set o_listen, "Listen mode";
+      "-p", Set_int o_local_port, "Local port";
+      "-s", Set_string o_local_address, "Source IP";
+      "-B", Set_int o_buf_size, "Buffer size";
+      "-n", Set o_numeric, "Don't resolve hostnames";
     ]
 
 let usage_msg =
@@ -45,8 +47,26 @@ let usage_msg =
     \    %s [options] <destination-IP> <destination-port>\n\
     \    %s [options] -l -p <listening-port>" Sys.argv.(0) Sys.argv.(0)
 
+let anon_fun =
+  let i = ref (-1) in
+  fun s ->
+    incr i;
+    try
+      match !i with
+      | 0 -> o_remote_address := s
+      | 1 -> o_remote_port := int_of_string s
+      | _ -> raise Exit
+    with _ ->
+      raise Exit
+
 let main () =
-  Arg.parse spec (fun _ -> ()) usage_msg
+  Arg.parse spec anon_fun usage_msg;
+  if !o_listen && (!o_remote_port <> 0 || !o_remote_address <> "") then raise Exit;
+  if not !o_listen && (!o_remote_port = 0 || !o_remote_address = "") then raise Exit
 
 let () =
-  main ()
+  try
+    main ()
+  with Exit ->
+    Arg.usage spec usage_msg;
+    exit 2
