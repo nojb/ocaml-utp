@@ -179,6 +179,24 @@ let on_state_change sock st =
   | STATE_WRITABLE ->
       write_data sock
 
+
+type utp_socket_stats =
+  {
+    nbytes_recv : int;
+    nbytes_xmit : int;
+    rexmit : int;
+    fastrexmit : int;
+    nxmit : int;
+    nrecv : int;
+    nduprecv : int;
+    mtu_guess : int;
+  }
+
+external utp_get_stats : utp_socket -> utp_socket_stats = "caml_utp_get_stats"
+
+let get_stats sock =
+  utp_get_stats sock
+
 let () =
   Callback.register "caml_utp_on_read" on_read;
   Callback.register "caml_utp_on_state_change" on_state_change;

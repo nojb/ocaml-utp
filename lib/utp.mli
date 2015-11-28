@@ -26,3 +26,17 @@ val socket : unit -> utp_socket
 val connect : utp_socket -> Unix.sockaddr -> unit Lwt.t
 val read : utp_socket -> bytes -> int -> int -> int Lwt.t
 val write : utp_socket -> bytes -> int -> int -> int Lwt.t
+
+type utp_socket_stats =
+  {
+    nbytes_recv : int;
+    nbytes_xmit : int;
+    rexmit : int;
+    fastrexmit : int;
+    nxmit : int;
+    nrecv : int;
+    nduprecv : int;
+    mtu_guess : int;
+  }
+
+val get_stats : utp_socket -> utp_socket_stats

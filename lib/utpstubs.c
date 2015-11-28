@@ -1,7 +1,8 @@
 #include <assert.h>
 
-#include <caml/mlvalues.h>
 #include <caml/memory.h>
+#include <caml/mlvalues.h>
+#include <caml/alloc.h>
 #include <caml/callback.h>
 #include <caml/bigarray.h>
 
@@ -123,4 +124,29 @@ CAMLprim value caml_utp_check_timeouts(value ctx)
   utp_context* utp_ctx = (utp_context*)ctx;
   utp_check_timeouts(utp_ctx);
   return Val_unit;
+}
+
+CAMLprim value caml_utp_get_stats(value sock)
+{
+  CAMLparam1(sock);
+  CAMLlocal1(stats);
+
+  utp_socket_stats *utp_stats;
+  utp_socket *utp_sock;
+
+  utp_sock = (utp_socket *)sock;
+  utp_stats = utp_get_stats(utp_sock);
+
+  stats = caml_alloc(8, 0);
+
+  Store_field(stats, 0, Val_int(utp_stats->nbytes_recv));
+  Store_field(stats, 1, Val_int(utp_stats->nbytes_xmit));
+  Store_field(stats, 2, Val_int(utp_stats->rexmit));
+  Store_field(stats, 3, Val_int(utp_stats->fastrexmit));
+  Store_field(stats, 4, Val_int(utp_stats->nxmit));
+  Store_field(stats, 5, Val_int(utp_stats->nrecv));
+  Store_field(stats, 6, Val_int(utp_stats->nduprecv));
+  Store_field(stats, 7, Val_int(utp_stats->mtu_guess));
+
+  CAMLreturn(stats);
 }

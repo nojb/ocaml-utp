@@ -4,7 +4,8 @@ OCAMLOPT = ocamlopt
 OCAMLMKLIB = ocamlmklib
 CC = cc
 LIBUTP_DIR = ../libutp
-CFLAGS = -fPIC -I/usr/local/lib/ocaml/ -I$(LIBUTP_DIR)
+OCAML_DIR = `ocamlfind printconf stdlib`
+CFLAGS = -fPIC -I$(OCAML_DIR) -I$(LIBUTP_DIR)
 
 all: clib bytelib nativelib
 
