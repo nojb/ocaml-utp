@@ -21,8 +21,7 @@
    SOFTWARE. *)
 
 type utp_context
-type 'a utp_socket
-type user_data
+type utp_socket
 
-val read : user_data utp_socket -> bytes -> int -> int -> int Lwt.t
-val write : user_data utp_socket -> bytes -> int -> int -> int Lwt.t
+val read : utp_socket -> bytes -> int -> int -> int Lwt.t
+val write : utp_socket -> bytes -> int -> int -> int Lwt.t

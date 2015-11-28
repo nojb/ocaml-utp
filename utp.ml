@@ -21,17 +21,7 @@
    SOFTWARE. *)
 
 type utp_context
-type 'a utp_socket
-
-external utp_init : int -> utp_context = "caml_utp_init"
-external utp_destroy : utp_context -> unit = "caml_utp_destroy"
-external utp_create_socket : 'a -> 'a utp_socket = "caml_utp_create_socket"
-external utp_get_userdata : 'a utp_socket -> 'a = "caml_utp_get_userdata"
-external utp_write : 'a utp_socket -> bytes -> int -> int -> int = "caml_utp_write"
-external utp_read_drained : 'a utp_socket -> unit = "caml_utp_read_drained"
-external utp_issue_deferred_acks : utp_context -> unit = "caml_utp_issue_deferred_acks"
-external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
-external utp_process_udp : utp_context -> Lwt_bytes.t -> int -> Unix.sockaddr -> int = "caml_utp_process_udp"
+type utp_socket
 
 type user_data =
   {
@@ -44,7 +34,15 @@ type user_data =
     writers : int Lwt.u Lwt_sequence.t;
   }
 
-type sock
+external utp_init : int -> utp_context = "caml_utp_init"
+external utp_destroy : utp_context -> unit = "caml_utp_destroy"
+external utp_create_socket : user_data -> utp_socket = "caml_utp_create_socket"
+external utp_get_userdata : utp_socket -> user_data = "caml_utp_get_userdata"
+external utp_write : utp_socket -> bytes -> int -> int -> int = "caml_utp_write"
+external utp_read_drained : utp_socket -> unit = "caml_utp_read_drained"
+external utp_issue_deferred_acks : utp_context -> unit = "caml_utp_issue_deferred_acks"
+external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
+external utp_process_udp : utp_context -> Lwt_bytes.t -> int -> Unix.sockaddr -> int = "caml_utp_process_udp"
 
 let null = Lwt_bytes.create 0
 
