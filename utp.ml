@@ -36,7 +36,7 @@ type user_data =
 
 external utp_init : int -> utp_context = "caml_utp_init"
 external utp_destroy : utp_context -> unit = "caml_utp_destroy"
-external utp_create_socket : user_data -> utp_socket = "caml_utp_create_socket"
+external utp_create_socket : utp_context -> user_data -> utp_socket = "caml_utp_create_socket"
 external utp_get_userdata : utp_socket -> user_data = "caml_utp_get_userdata"
 external utp_write : utp_socket -> bytes -> int -> int -> int = "caml_utp_write"
 external utp_read_drained : utp_socket -> unit = "caml_utp_read_drained"
@@ -47,13 +47,29 @@ external utp_connect : utp_socket -> Unix.sockaddr -> unit = "caml_utp_connect"
 external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
 
 let the_socket = Lwt_unix.socket Lwt_unix.PF_INET Lwt_unix.SOCK_DGRAM 0
+let the_context = utp_init 2
+
+let null = Lwt_bytes.create 0
+
+let socket () =
+  let connecting, connected = Lwt.wait () in
+  let info =
+    {
+      connected;
+      connecting;
+      read_buf = null;
+      to_read = Queue.create ();
+      readers = Lwt_sequence.create ();
+      to_write = Queue.create ();
+      writers = Lwt_sequence.create ();
+    }
+  in
+  utp_create_socket the_context info
 
 let connect sock addr =
   let info = utp_get_userdata sock in
   utp_connect sock addr;
   info.connecting
-
-let null = Lwt_bytes.create 0
 
 let read sock wbuf woff wlen =
   let userdata = utp_get_userdata sock in

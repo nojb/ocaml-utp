@@ -20,9 +20,9 @@
    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE. *)
 
-type utp_context
 type utp_socket
 
+val socket : unit -> utp_socket
 val connect : utp_socket -> Unix.sockaddr -> unit Lwt.t
 val read : utp_socket -> bytes -> int -> int -> int Lwt.t
 val write : utp_socket -> bytes -> int -> int -> int Lwt.t
