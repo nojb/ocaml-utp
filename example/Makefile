@@ -3,10 +3,10 @@ LIB_DIR = ../lib
 
 all: ucat ucat.opt
 
-ucat:
+ucat: ucat.ml
 	$(OCAMLFIND) ocamlc -linkpkg -o $@ -package lwt.unix -I $(LIB_DIR) -cclib -L$(LIB_DIR) utp.cma ucat.ml
 
-ucat.opt:
+ucat.opt: ucat.ml
 	$(OCAMLFIND) ocamlopt -linkpkg -o $@ -package lwt.unix -I $(LIB_DIR) -cclib -L$(LIB_DIR) utp.cmxa ucat.ml
 
 clean:

@@ -25,7 +25,6 @@ let o_listen = ref false
 let o_local_port = ref 0
 let o_local_address = ref "0.0.0.0"
 let o_buf_size = ref 4096
-let o_numeric = ref false
 let o_remote_port = ref 0
 let o_remote_address = ref ""
 
@@ -38,7 +37,6 @@ let spec =
       "-p", Set_int o_local_port, "Local port";
       "-s", Set_string o_local_address, "Source IP";
       "-B", Set_int o_buf_size, "Buffer size";
-      "-n", Set o_numeric, "Don't resolve hostnames";
     ]
 
 let usage_msg =
@@ -59,16 +57,40 @@ let anon_fun =
     with _ ->
       raise Exit
 
+open Lwt.Infix
+
+let complete f buf off len =
+  let rec loop off len =
+    if len <= 0 then
+      Lwt.return_unit
+    else
+      f buf off len >>= fun n ->
+      loop (off + n) (len - n)
+  in
+  loop off len
+
 let main () =
   Arg.parse spec anon_fun usage_msg;
   if !o_listen && (!o_remote_port <> 0 || !o_remote_address <> "") then raise Exit;
   if not !o_listen && (!o_remote_port = 0 || !o_remote_address = "") then raise Exit;
+  let buf = Bytes.create !o_buf_size in
   let sock = Utp.socket () in
-  ()
+  match !o_listen with
+  | false ->
+      let addr = Unix.ADDR_INET (Unix.inet_addr_of_string !o_remote_address, !o_remote_port) in
+      Utp.connect sock addr >>= fun () ->
+      let rec loop () =
+        Lwt_unix.read Lwt_unix.stdin buf 0 (Bytes.length buf) >>= fun len ->
+        complete (Utp.write sock) buf 0 len >>=
+        loop
+      in
+      loop ()
+  | true ->
+      Lwt.return_unit
 
 let () =
   try
-    main ()
+    Lwt_main.run (main ())
   with Exit ->
     Arg.usage spec usage_msg;
     exit 2
