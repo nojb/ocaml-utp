@@ -23,7 +23,10 @@ utp.cmx: utp.mli utp.ml
 	$(OCAMLFIND) ocamlopt -package lwt.unix -c $^
 
 %.o: %.c
-	ocamlopt -ccopt -I$(LIBUTP_DIR) -ccopt $(CFLAGS) -o $@ -c $<
+	$(OCAMLOPT) -ccopt -I$(LIBUTP_DIR) -ccopt $(CFLAGS) -o $@ -c $<
+
+doc: utp.mli
+	$(OCAMLFIND) ocamldoc -package lwt.unix -d ../doc -html -colorize-code -css-style ../doc/style.css $^
 
 install: all
 	$(OCAMLFIND) install utp META utp.cma utp.cmxa libutp.a
