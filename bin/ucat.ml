@@ -51,23 +51,16 @@ let anon_fun =
   let i = ref (-1) in
   fun s ->
     incr i;
-    match !i with
-    | 0 ->
-        o_remote_address := s
-    | 1 ->
-        begin
-          try
-            o_remote_port := int_of_string s
-          with _ ->
-            raise (Arg.Bad ("invalid remote port: " ^ s))
-        end
-    | _ ->
-        raise (Arg.Bad "too many anonymous arguments")
-
-exception Fatal of string
+    try
+      match !i with
+      | 0 -> o_remote_address := s
+      | 1 -> o_remote_port := int_of_string s
+      | _ -> raise Exit
+    with _ ->
+      raise Exit
 
 let die fmt =
-  Printf.ksprintf (fun s -> raise (Fatal s)) fmt
+  Printf.ksprintf failwith fmt
 
 let complete f buf off len =
   let rec loop off len =
@@ -101,10 +94,10 @@ let main () =
   Arg.parse spec anon_fun usage_msg;
 
   if !o_listen && (!o_remote_port <> 0 || !o_remote_address <> "") then
-    raise (Arg.Bad "remote_port or address present not allowed when using -l");
+    raise Exit;
 
   if not !o_listen && (!o_remote_port = 0 || !o_remote_address = "") then
-    raise (Arg.Bad "remote port or address missing");
+    raise Exit;
 
   let buf = Bytes.create !o_buf_size in
   match !o_listen with
@@ -138,10 +131,9 @@ let () =
   try
     Lwt_main.run (main ())
   with
-  | Arg.Bad s ->
-      Printf.eprintf "ERROR: invalid argument: %s\n" s;
+  | Exit ->
       Arg.usage spec usage_msg;
       exit 2
-  | Fatal s ->
-      Printf.eprintf "FATAL: %s\n%!" s;
+  | Failure s ->
+      Printf.eprintf "\x1B[31mFATAL:\x1B[0m %s\n%!" s;
       exit 1
