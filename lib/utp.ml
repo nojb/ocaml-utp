@@ -27,6 +27,8 @@ type user_data =
   {
     connected : unit Lwt.u;
     connecting : unit Lwt.t;
+    closing : unit Lwt.t;
+    closed : unit Lwt.u;
     mutable read_buf : Lwt_bytes.t;
     to_read : (bytes * int * int) Queue.t;
     readers : int Lwt.u Lwt_sequence.t;
@@ -45,6 +47,7 @@ external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
 external utp_process_udp : utp_context -> Lwt_bytes.t -> int -> Unix.sockaddr -> int = "caml_utp_process_udp"
 external utp_connect : utp_socket -> Unix.sockaddr -> unit = "caml_utp_connect"
 external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
+external utp_close : utp_socket -> unit = "caml_utp_close"
 
 let the_socket = Lwt_unix.socket Lwt_unix.PF_INET Lwt_unix.SOCK_DGRAM 0
 let the_context = utp_init 2
@@ -53,10 +56,13 @@ let null = Lwt_bytes.create 0
 
 let socket () =
   let connecting, connected = Lwt.wait () in
+  let closing, closed = Lwt.wait () in
   let info =
     {
       connected;
       connecting;
+      closing;
+      closed;
       read_buf = null;
       to_read = Queue.create ();
       readers = Lwt_sequence.create ();
@@ -187,9 +193,10 @@ let on_state_change sock st =
       write_data sock
   | STATE_WRITABLE ->
       write_data sock
-  | STATE_EOF
+  | STATE_EOF ->
+      utp_close sock
   | STATE_DESTROYING ->
-      () (* FIXME *)
+      Lwt.wakeup info.closed ()
 
 type utp_socket_stats =
   {
@@ -207,6 +214,11 @@ external utp_get_stats : utp_socket -> utp_socket_stats = "caml_utp_get_stats"
 
 let get_stats sock =
   utp_get_stats sock
+
+let close sock =
+  let info = utp_get_userdata sock in
+  utp_close sock;
+  info.closing
 
 let () =
   Callback.register "caml_utp_on_read" on_read;

@@ -105,6 +105,12 @@ CAMLprim value caml_utp_get_userdata(value sock)
   return *(value *)(utp_get_userdata((utp_socket *)sock));
 }
 
+CAMLprim value caml_utp_close(value sock)
+{
+  utp_close((utp_socket *)sock);
+  return Val_unit;
+}
+
 CAMLprim value caml_utp_init(value version)
 {
   utp_context *utp_ctx;
