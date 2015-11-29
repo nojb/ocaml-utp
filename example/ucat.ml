@@ -94,6 +94,7 @@ let main () =
       let addr = Unix.ADDR_INET (Unix.inet_addr_of_string !o_local_address, !o_local_port) in
       Utp.bind addr;
       Utp.accept () >>= fun (sock, _) ->
+      Printf.eprintf "ucat: connection accepted\n%!";
       loop sock
 
 let () =

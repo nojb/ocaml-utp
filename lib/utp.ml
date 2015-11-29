@@ -85,7 +85,9 @@ let accept () =
   Lwt.add_task_l accepting
 
 let read sock wbuf woff wlen =
+  Printf.eprintf "[utp] read: woff = %d wlen = %d\n%!" woff wlen;
   let userdata = utp_get_userdata sock in
+  Printf.eprintf "A\n%!";
   let len = Lwt_bytes.length userdata.read_buf in
   if Queue.is_empty userdata.to_read && len > 0 then begin
     let n = min len wlen in

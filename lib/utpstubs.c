@@ -7,6 +7,7 @@
 #include <caml/alloc.h>
 #include <caml/callback.h>
 #include <caml/bigarray.h>
+#include <caml/fail.h>
 
 #include "utp.h"
 
@@ -119,7 +120,15 @@ static uint64 callback_on_firewall(utp_callback_arguments *a)
 
 CAMLprim value caml_utp_get_userdata(value sock)
 {
-  return *(value *)(utp_get_userdata((utp_socket *)sock));
+  void *info;
+
+  info = utp_get_userdata((utp_socket *)sock);
+
+  if (!info) {
+    caml_invalid_argument("utp_get_userdata");
+  }
+
+  return *(value *)info;
 }
 
 CAMLprim value caml_utp_close(value sock)
