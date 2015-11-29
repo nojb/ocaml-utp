@@ -24,6 +24,7 @@ type utp_socket
 
 val socket : unit -> utp_socket
 val connect : utp_socket -> Unix.sockaddr -> unit Lwt.t
+val accept : unit -> (utp_socket * Unix.sockaddr) Lwt.t
 val read : utp_socket -> bytes -> int -> int -> int Lwt.t
 val write : utp_socket -> bytes -> int -> int -> int Lwt.t
 val close : utp_socket -> unit Lwt.t

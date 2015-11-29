@@ -74,10 +74,10 @@ let main () =
   if !o_listen && (!o_remote_port <> 0 || !o_remote_address <> "") then raise Exit;
   if not !o_listen && (!o_remote_port = 0 || !o_remote_address = "") then raise Exit;
   let buf = Bytes.create !o_buf_size in
-  let sock = Utp.socket () in
   match !o_listen with
   | false ->
       let addr = Unix.ADDR_INET (Unix.inet_addr_of_string !o_remote_address, !o_remote_port) in
+      let sock = Utp.socket () in
       Utp.connect sock addr >>= fun () ->
       let rec loop () =
         Lwt_unix.read Lwt_unix.stdin buf 0 (Bytes.length buf) >>= fun len ->
@@ -86,12 +86,13 @@ let main () =
       in
       loop ()
   | true ->
-      let rec loop () =
+      let rec loop sock =
         Utp.read sock buf 0 (Bytes.length buf) >>= fun len ->
-        complete (Lwt_unix.write Lwt_unix.stdout) buf 0 len >>=
-        loop
+        complete (Lwt_unix.write Lwt_unix.stdout) buf 0 len >>= fun () ->
+        loop sock
       in
-      loop ()
+      Utp.accept () >>= fun (sock, _) ->
+      loop sock
 
 let () =
   try

@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <string.h>
+#include <stdio.h>
 
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
@@ -13,6 +14,7 @@
 
 static uint64 callback_on_read(utp_callback_arguments* a)
 {
+  fprintf(stderr, "callback_on_read\n");
   value ba = caml_ba_alloc_dims(CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *)a->buf, a->len);
   caml_callback2 (*caml_named_value("caml_utp_on_read"), (value)a->socket, ba);
   return 0;
@@ -20,6 +22,7 @@ static uint64 callback_on_read(utp_callback_arguments* a)
 
 static uint64 callback_on_state_change(utp_callback_arguments *a)
 {
+  fprintf(stderr, "callback_on_state_change\n");
   int state;
   switch (a->state) {
   case UTP_STATE_CONNECT:
@@ -44,6 +47,7 @@ static uint64 callback_on_state_change(utp_callback_arguments *a)
 
 static uint64 callback_on_error(utp_callback_arguments *a)
 {
+  fprintf(stderr, "callback_on_error");
   int i;
   switch (a->error_code) {
   case UTP_ECONNREFUSED:
@@ -62,6 +66,7 @@ static uint64 callback_on_error(utp_callback_arguments *a)
 
 static uint64 callback_on_sendto(utp_callback_arguments *a)
 {
+  fprintf(stderr, "callback_on_sendto\n");
   union sock_addr_union sock_addr;
   socklen_param_type sock_addr_len;
   value addr;
@@ -79,6 +84,7 @@ static uint64 callback_on_sendto(utp_callback_arguments *a)
 
 static uint64 callback_on_log(utp_callback_arguments *a)
 {
+  fprintf(stderr, "callback_on_log\n");
   value str;
 
   str = caml_alloc_string(strlen((char *)a->buf));
@@ -90,13 +96,24 @@ static uint64 callback_on_log(utp_callback_arguments *a)
 
 static uint64 callback_on_accept(utp_callback_arguments *a)
 {
-  caml_callback(*caml_named_value("caml_utp_on_accept"), (value)a->socket);
+  fprintf(stderr, "callback_on_accept\n");
+
+  union sock_addr_union sock_addr;
+  socklen_param_type sock_addr_len;
+  value addr;
+
+  sock_addr_len = sizeof (struct sockaddr_in);
+  memcpy(&sock_addr.s_inet, (struct sockaddr_in *)a->address, sock_addr_len);
+  addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
+
+  caml_callback2(*caml_named_value("caml_utp_on_accept"), (value)a->socket, addr);
 
   return 0;
 }
 
 static uint64 callback_on_firewall(utp_callback_arguments *a)
 {
+  fprintf(stderr, "callback_on_firewall\n");
   return 0;
 }
 

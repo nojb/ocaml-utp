@@ -51,6 +51,7 @@ external utp_close : utp_socket -> unit = "caml_utp_close"
 
 let the_socket = Lwt_unix.socket Lwt_unix.PF_INET Lwt_unix.SOCK_DGRAM 0
 let the_context = utp_init 2
+let accepting : (utp_socket * Unix.sockaddr) Lwt.u Lwt_sequence.t = Lwt_sequence.create ()
 
 let null = Lwt_bytes.create 0
 
@@ -76,6 +77,9 @@ let connect sock addr =
   let info = utp_get_userdata sock in
   utp_connect sock addr;
   info.connecting
+
+let accept () =
+  Lwt.add_task_l accepting
 
 let read sock wbuf woff wlen =
   let userdata = utp_get_userdata sock in
@@ -176,8 +180,11 @@ let write_data sock =
     end
   done
 
-let on_accept sock =
-  write_data sock
+let on_accept sock addr =
+  match Lwt_sequence.take_opt_r accepting with
+  | None -> ()
+  | Some u -> Lwt.wakeup u (sock, addr)
+  (* write_data sock *)
 
 type state =
   | STATE_CONNECT
