@@ -281,6 +281,10 @@ CAMLprim value caml_utp_get_stats(value sock)
   utp_sock = (utp_socket *)sock;
   utp_stats = utp_get_stats(utp_sock);
 
+  if (!utp_stats) {
+    caml_failwith("utp_get_stats");
+  }
+
   stats = caml_alloc(8, 0);
 
   Store_field(stats, 0, Val_int(utp_stats->nbytes_recv));
