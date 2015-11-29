@@ -38,8 +38,9 @@ type user_data =
 
 external utp_init : int -> utp_context = "caml_utp_init"
 external utp_destroy : utp_context -> unit = "caml_utp_destroy"
-external utp_create_socket : utp_context -> user_data -> utp_socket = "caml_utp_create_socket"
+external utp_create_socket : utp_context -> utp_socket = "caml_utp_create_socket"
 external utp_get_userdata : utp_socket -> user_data = "caml_utp_get_userdata"
+external utp_set_userdata : utp_socket -> user_data -> unit = "caml_utp_set_userdata"
 external utp_write : utp_socket -> bytes -> int -> int -> int = "caml_utp_write"
 external utp_read_drained : utp_socket -> unit = "caml_utp_read_drained"
 external utp_issue_deferred_acks : utp_context -> unit = "caml_utp_issue_deferred_acks"
@@ -58,23 +59,26 @@ let null = Lwt_bytes.create 0
 let bind addr =
   Lwt_unix.bind the_socket addr
 
-let socket () =
+let create_info () =
   let connecting, connected = Lwt.wait () in
   let closing, closed = Lwt.wait () in
-  let info =
-    {
-      connected;
-      connecting;
-      closing;
-      closed;
-      read_buf = null;
-      to_read = Queue.create ();
-      readers = Lwt_sequence.create ();
-      to_write = Queue.create ();
-      writers = Lwt_sequence.create ();
-    }
-  in
-  utp_create_socket the_context info
+  {
+    connected;
+    connecting;
+    closing;
+    closed;
+    read_buf = null;
+    to_read = Queue.create ();
+    readers = Lwt_sequence.create ();
+    to_write = Queue.create ();
+    writers = Lwt_sequence.create ();
+  }
+
+let socket () =
+  let sock = utp_create_socket the_context in
+  let info = create_info () in
+  utp_set_userdata sock info;
+  sock
 
 let connect sock addr =
   let info = utp_get_userdata sock in
@@ -188,7 +192,10 @@ let write_data sock =
 let on_accept sock addr =
   match Lwt_sequence.take_opt_r accepting with
   | None -> ()
-  | Some u -> Lwt.wakeup u (sock, addr)
+  | Some u ->
+      let info = create_info () in
+      utp_set_userdata sock info;
+      Lwt.wakeup u (sock, addr)
   (* write_data sock *)
 
 type state =

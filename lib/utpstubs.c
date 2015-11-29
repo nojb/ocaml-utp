@@ -120,15 +120,35 @@ static uint64 callback_on_firewall(utp_callback_arguments *a)
 
 CAMLprim value caml_utp_get_userdata(value sock)
 {
-  void *info;
+  void *utp_info;
 
-  info = utp_get_userdata((utp_socket *)sock);
+  utp_info = utp_get_userdata((utp_socket *)sock);
 
-  if (!info) {
+  if (!utp_info) {
     caml_invalid_argument("utp_get_userdata");
   }
 
-  return *(value *)info;
+  return *(value *)utp_info;
+}
+
+CAMLprim value caml_utp_set_userdata(value sock, value info)
+{
+  value *utp_info;
+  utp_socket *utp_sock;
+
+  utp_sock = (utp_socket *)sock;
+  utp_info = utp_get_userdata(utp_sock);
+
+  if (utp_info) {
+    caml_modify_generational_global_root(utp_info, info);
+  } else {
+    utp_info = (value *)malloc(sizeof (value));
+    *utp_info = info;
+    caml_register_generational_global_root(utp_info);
+    utp_set_userdata(utp_sock, utp_info);
+  }
+
+  return Val_unit;
 }
 
 CAMLprim value caml_utp_close(value sock)
@@ -186,16 +206,15 @@ CAMLprim value caml_utp_process_udp(value ctx, value buf, value len, value sa)
   return Val_int(handled);
 }
 
-CAMLprim value caml_utp_create_socket(value ctx, value data)
+CAMLprim value caml_utp_create_socket(value ctx)
 {
   utp_socket *utp_sock;
-  value *userdata;
 
   utp_sock = utp_create_socket((utp_context *)ctx);
-  userdata = (value *)malloc(sizeof (value));
-  *userdata = data;
-  caml_register_generational_global_root(userdata);
-  utp_set_userdata(utp_sock, userdata);
+
+  if (!utp_sock) {
+    caml_failwith("utp_create_socket");
+  }
 
   return (value)utp_sock;
 }
