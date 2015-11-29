@@ -11,14 +11,14 @@
 
 #include "socketaddr.h"
 
-static uint64 utp_on_read(utp_callback_arguments* a)
+static uint64 callback_on_read(utp_callback_arguments* a)
 {
   value ba = caml_ba_alloc_dims(CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *)a->buf, a->len);
   caml_callback2 (*caml_named_value("caml_utp_on_read"), (value)a->socket, ba);
   return 0;
 }
 
-static uint64 utp_on_state_change(utp_callback_arguments *a)
+static uint64 callback_on_state_change(utp_callback_arguments *a)
 {
   int state;
   switch (a->state) {
@@ -42,7 +42,7 @@ static uint64 utp_on_state_change(utp_callback_arguments *a)
   return 0;
 }
 
-static uint64 utp_on_error(utp_callback_arguments *a)
+static uint64 callback_on_error(utp_callback_arguments *a)
 {
   int i;
   switch (a->error_code) {
@@ -60,7 +60,7 @@ static uint64 utp_on_error(utp_callback_arguments *a)
   return 0;
 }
 
-static uint64 utp_on_sendto(utp_callback_arguments *a)
+static uint64 callback_on_sendto(utp_callback_arguments *a)
 {
   union sock_addr_union sock_addr;
   socklen_param_type sock_addr_len;
@@ -77,7 +77,7 @@ static uint64 utp_on_sendto(utp_callback_arguments *a)
   return 0;
 }
 
-static uint64 utp_on_log(utp_callback_arguments *a)
+static uint64 callback_on_log(utp_callback_arguments *a)
 {
   value str;
 
@@ -88,14 +88,14 @@ static uint64 utp_on_log(utp_callback_arguments *a)
   return 0;
 }
 
-static uint64 utp_on_accept(utp_callback_arguments *a)
+static uint64 callback_on_accept(utp_callback_arguments *a)
 {
   caml_callback(*caml_named_value("caml_utp_on_accept"), (value)a->socket);
 
   return 0;
 }
 
-static uint64 utp_on_firewall(utp_callback_arguments *a)
+static uint64 callback_on_firewall(utp_callback_arguments *a)
 {
   return 0;
 }
@@ -111,13 +111,13 @@ CAMLprim value caml_utp_init(value version)
 
   utp_ctx = utp_init(Int_val(version));
 
-  utp_set_callback(utp_ctx, UTP_ON_READ, utp_on_read);
-  utp_set_callback(utp_ctx, UTP_ON_STATE_CHANGE, utp_on_state_change);
-  utp_set_callback(utp_ctx, UTP_SENDTO, utp_on_sendto);
-  utp_set_callback(utp_ctx, UTP_LOG, utp_on_log);
-  utp_set_callback(utp_ctx, UTP_ON_ERROR, utp_on_error);
-  utp_set_callback(utp_ctx, UTP_ON_ACCEPT, utp_on_accept);
-  utp_set_callback(utp_ctx, UTP_ON_FIREWALL, utp_on_firewall);
+  utp_set_callback(utp_ctx, UTP_ON_READ, callback_on_read);
+  utp_set_callback(utp_ctx, UTP_ON_STATE_CHANGE, callback_on_state_change);
+  utp_set_callback(utp_ctx, UTP_SENDTO, callback_on_sendto);
+  utp_set_callback(utp_ctx, UTP_LOG, callback_on_log);
+  utp_set_callback(utp_ctx, UTP_ON_ERROR, callback_on_error);
+  utp_set_callback(utp_ctx, UTP_ON_ACCEPT, callback_on_accept);
+  utp_set_callback(utp_ctx, UTP_ON_FIREWALL, callback_on_firewall);
 
   return (value)utp_ctx;
 }
