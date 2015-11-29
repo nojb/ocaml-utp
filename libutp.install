@@ -1,0 +1,14 @@
+lib: [
+  "lib/META" {"META"}
+  "lib/utp.mli" {"utp.mli"}
+  "lib/utp.cmi" {"utp.cmi"}
+  "lib/utp.cma" {"utp.cma"}
+  "lib/utp.cmxa" {"utp.cmxa"}
+  "lib/libutp.a" {"libutp.a"}
+]
+bin: [
+  "example/ucat" {"ucat"}
+]
+doc: [
+  "README.md" {"README.md"}
+]

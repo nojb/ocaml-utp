@@ -1,0 +1,6 @@
+name = "utp"
+version = "0.1.0"
+description = "OCaml bindings for libutp"
+requires = "lwt.unix"
+archive(byte) = "utp.cma"
+archive(native) = "utp.cmxa"
