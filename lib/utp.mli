@@ -16,6 +16,7 @@
    along with this library; if not, write to the Free Software Foundation, Inc.,
    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA *)
 
+type context
 type socket
 
 type socket_stats =
@@ -30,10 +31,11 @@ type socket_stats =
     mtu_guess : int;
   }
 
-val socket : unit -> socket
+val context : unit -> context
+val socket : context -> socket
 val connect : socket -> Unix.sockaddr -> unit Lwt.t
-val bind : Unix.sockaddr -> unit
-val accept : unit -> (socket * Unix.sockaddr) Lwt.t
+val bind : context -> Unix.sockaddr -> unit
+val accept : context -> (socket * Unix.sockaddr) Lwt.t
 val read : socket -> bytes -> int -> int -> int Lwt.t
 val write : socket -> bytes -> int -> int -> int Lwt.t
 val close : socket -> unit Lwt.t

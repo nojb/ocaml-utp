@@ -100,11 +100,13 @@ let main () =
     raise Exit;
 
   let buf = Bytes.create !o_buf_size in
+  let ctx = Utp.context () in
+
   match !o_listen with
   | false ->
       let%lwt addr = lookup !o_remote_address !o_remote_port in
       Printf.eprintf "[ucat] connecting to %s...\n%!" (string_of_sockaddr addr);
-      let sock = Utp.socket () in
+      let sock = Utp.socket ctx in
       let%lwt () = Utp.connect sock addr in
       Printf.eprintf "[ucat] connected to %s\n%!" (string_of_sockaddr addr);
       let rec loop () =
@@ -122,8 +124,8 @@ let main () =
         loop sock
       in
       let%lwt addr = lookup !o_local_address !o_local_port in
-      Utp.bind addr;
-      let%lwt sock, _ = Utp.accept () in
+      Utp.bind ctx addr;
+      let%lwt sock, _ = Utp.accept ctx in
       Printf.eprintf "ucat: connection accepted\n%!";
       loop sock
 

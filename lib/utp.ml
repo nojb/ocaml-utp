@@ -16,7 +16,7 @@
    along with this library; if not, write to the Free Software Foundation, Inc.,
    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA *)
 
-type context
+type utp_context
 type socket
 
 type socket_stats =
@@ -29,6 +29,13 @@ type socket_stats =
     nrecv : int;
     nduprecv : int;
     mtu_guess : int;
+  }
+
+type context =
+  {
+    utp_ctx : utp_context;
+    fd : Lwt_unix.file_descr;
+    accepting : (socket * Unix.sockaddr) Lwt.u Lwt_sequence.t;
   }
 
 type socket_info =
@@ -44,29 +51,60 @@ type socket_info =
     writers : int Lwt.u Lwt_sequence.t;
   }
 
-external utp_init : int -> context = "caml_utp_init"
-external utp_destroy : context -> unit = "caml_utp_destroy"
-external utp_create_socket : context -> socket = "caml_utp_create_socket"
+external utp_init : int -> utp_context = "caml_utp_init"
+external utp_destroy : utp_context -> unit = "caml_utp_destroy"
+external utp_create_socket : utp_context -> socket = "caml_utp_create_socket"
 external utp_get_userdata : socket -> socket_info = "caml_utp_get_userdata"
 external utp_set_userdata : socket -> socket_info -> unit = "caml_utp_set_userdata"
 external utp_write : socket -> bytes -> int -> int -> int = "caml_utp_write"
 external utp_read_drained : socket -> unit = "caml_utp_read_drained"
-external utp_issue_deferred_acks : context -> unit = "caml_utp_issue_deferred_acks"
-external utp_check_timeouts : context -> unit = "caml_utp_check_timeouts"
-external utp_process_udp : context -> Lwt_bytes.t -> int -> Unix.sockaddr -> int = "caml_utp_process_udp"
+external utp_issue_deferred_acks : utp_context -> unit = "caml_utp_issue_deferred_acks"
+external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
+external utp_process_udp : utp_context -> Lwt_bytes.t -> int -> Unix.sockaddr -> int = "caml_utp_process_udp"
 external utp_connect : socket -> Unix.sockaddr -> unit = "caml_utp_connect"
-external utp_check_timeouts : context -> unit = "caml_utp_check_timeouts"
+external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
 external utp_close : socket -> unit = "caml_utp_close"
 external utp_get_stats : socket -> socket_stats = "caml_utp_get_stats"
-
-let the_socket = Lwt_unix.socket Lwt_unix.PF_INET Lwt_unix.SOCK_DGRAM 0
-let the_context = utp_init 2
-let accepting : (socket * Unix.sockaddr) Lwt.u Lwt_sequence.t = Lwt_sequence.create ()
+external utp_get_context : socket -> utp_context = "caml_utp_get_context"
+external utp_context_get_userdata : utp_context -> context = "caml_utp_context_get_userdata"
+external utp_context_set_userdata : utp_context -> context -> unit = "caml_utp_context_set_userdata"
 
 let null = Lwt_bytes.create 0
 
-let bind addr =
-  Lwt_unix.bind the_socket addr
+open Lwt.Infix
+
+let rec check_timeouts ctx =
+  Lwt_unix.sleep 0.5 >>= fun () ->
+  utp_check_timeouts ctx.utp_ctx;
+  check_timeouts ctx
+
+let network_loop ctx =
+  let socket_data = Lwt_bytes.create 4096 in
+  let rec loop () =
+    Lwt_bytes.recvfrom ctx.fd socket_data 0 4096 [] >>= fun (n, sa) ->
+    let _ : int = utp_process_udp ctx.utp_ctx socket_data n sa in
+    if not (Lwt_unix.readable ctx.fd) then utp_issue_deferred_acks ctx.utp_ctx;
+    loop ()
+  in
+  loop ()
+
+let context () =
+  let fd = Lwt_unix.socket Lwt_unix.PF_INET Lwt_unix.SOCK_DGRAM 0 in
+  let utp_ctx = utp_init 2 in
+  let ctx =
+    {
+      utp_ctx;
+      fd;
+      accepting = Lwt_sequence.create ();
+    }
+  in
+  utp_context_set_userdata utp_ctx ctx;
+  Lwt.ignore_result (check_timeouts ctx);
+  Lwt.ignore_result (network_loop ctx);
+  ctx
+
+let bind ctx addr =
+  Lwt_unix.bind ctx.fd addr
 
 let create_info () =
   let connecting, connected = Lwt.wait () in
@@ -83,8 +121,8 @@ let create_info () =
     writers = Lwt_sequence.create ();
   }
 
-let socket () =
-  let sock = utp_create_socket the_context in
+let socket ctx =
+  let sock = utp_create_socket ctx.utp_ctx in
   let info = create_info () in
   utp_set_userdata sock info;
   sock
@@ -94,8 +132,8 @@ let connect sock addr =
   utp_connect sock addr;
   info.connecting
 
-let accept () =
-  Lwt.add_task_l accepting
+let accept ctx =
+  Lwt.add_task_l ctx.accepting
 
 let read sock wbuf woff wlen =
   Printf.eprintf "[utp] read: woff = %d wlen = %d\n%!" woff wlen;
@@ -116,27 +154,6 @@ let read sock wbuf woff wlen =
     Queue.push (wbuf, woff, wlen) userdata.to_read;
     Lwt.add_task_l userdata.readers
   end
-
-let rec check_timeouts ctx =
-  let open Lwt.Infix in
-  Lwt_unix.sleep 0.5 >>= fun () ->
-  utp_check_timeouts ctx;
-  check_timeouts ctx
-
-let network_loop ctx =
-  let open Lwt.Infix in
-  let socket_data = Lwt_bytes.create 4096 in
-  Lwt.ignore_result (check_timeouts ctx);
-  let rec loop () =
-    Lwt_bytes.recvfrom the_socket socket_data 0 4096 [] >>= fun (n, sa) ->
-    let _ : int = utp_process_udp ctx socket_data n sa in
-    if not (Lwt_unix.readable the_socket) then utp_issue_deferred_acks ctx;
-    loop ()
-  in
-  loop ()
-
-let () =
-  Lwt.ignore_result (network_loop the_context)
 
 let write_data sock =
   let userdata = utp_get_userdata sock in
@@ -162,10 +179,10 @@ type error =
   | ECONNRESET
   | ETIMEDOUT
 
-let on_sendto sock addr buf =
-  let open Lwt.Infix in
+let on_sendto utp_ctx addr buf =
+  let ctx = utp_context_get_userdata utp_ctx in
   let t =
-    Lwt_bytes.sendto the_socket buf 0 (Lwt_bytes.length buf) [] addr >>= fun n ->
+    Lwt_bytes.sendto ctx.fd buf 0 (Lwt_bytes.length buf) [] addr >>= fun n ->
     Printf.eprintf "[utp] wrote %d bytes via sendto\n%!" n;
     Lwt.return n
   in
@@ -208,7 +225,9 @@ let on_read sock buf =
   end
 
 let on_accept sock addr =
-  match Lwt_sequence.take_opt_r accepting with
+  let utp_ctx = utp_get_context sock in
+  let ctx = utp_context_get_userdata utp_ctx in
+  match Lwt_sequence.take_opt_r ctx.accepting with
   | None -> ()
   | Some u ->
       let info = create_info () in

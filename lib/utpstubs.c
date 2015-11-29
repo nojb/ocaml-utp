@@ -96,7 +96,7 @@ static uint64 callback_on_sendto(utp_callback_arguments *a)
   addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
   buf = caml_ba_alloc_dims(CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *)a->buf, a->len);
 
-  caml_callback3(*caml_named_value("caml_utp_on_sendto"), (value)a->socket, addr, buf);
+  caml_callback3(*caml_named_value("caml_utp_on_sendto"), (value)a->context, addr, buf);
 
   return 0;
 }
@@ -293,4 +293,44 @@ CAMLprim value caml_utp_get_stats(value sock)
   Store_field(stats, 7, Val_int(utp_stats->mtu_guess));
 
   CAMLreturn(stats);
+}
+
+CAMLprim value caml_utp_get_context(value sock)
+{
+  if (!sock) {
+    caml_invalid_argument("utp_get_context");
+  }
+
+  return (value)utp_get_context((utp_socket *)sock);
+}
+
+CAMLprim value caml_utp_context_get_userdata(value utp_ctx)
+{
+  void *ctx;
+
+  ctx = utp_context_get_userdata((utp_context *)utp_ctx);
+
+  if (!ctx) {
+    caml_invalid_argument("utp_context_get_userdata");
+  }
+
+  return *(value *)ctx;
+}
+
+CAMLprim value caml_utp_context_set_userdata(value utp_ctx, value ctx)
+{
+  value *old_ctx;
+
+  old_ctx = utp_context_get_userdata((utp_context *)utp_ctx);
+
+  if (old_ctx) {
+    caml_modify_generational_global_root(old_ctx, ctx);
+  } else {
+    old_ctx = (value *)malloc(sizeof (value));
+    *old_ctx = ctx;
+    caml_register_generational_global_root(old_ctx);
+    utp_context_set_userdata((utp_context *)utp_ctx, old_ctx);
+  }
+
+  return Val_unit;
 }
