@@ -67,16 +67,14 @@ let anon_fun =
 exception Fatal of string
 
 let die fmt =
-  Printf.ksprintf (fun s -> Lwt.fail (Fatal s)) fmt
-
-open Lwt.Infix
+  Printf.ksprintf (fun s -> raise (Fatal s)) fmt
 
 let complete f buf off len =
   let rec loop off len =
     if len <= 0 then
       Lwt.return_unit
     else
-      f buf off len >>= fun n ->
+      let%lwt n = f buf off len in
       loop (off + n) (len - n)
   in
   loop off len
@@ -87,9 +85,9 @@ let lookup addr port =
   let hints = [U.AI_FAMILY U.PF_INET; U.AI_SOCKTYPE U.SOCK_DGRAM] in
   let hints = if !o_numeric then U.AI_NUMERICHOST :: hints else hints in
   let hints = if !o_listen then U.AI_PASSIVE :: hints else hints in
-  U.getaddrinfo addr (string_of_int port) hints >>= function
+  match%lwt U.getaddrinfo addr (string_of_int port) hints with
   | [] ->
-      die "getaddrinfo"
+      [%lwt die "getaddrinfo"]
   | res :: _ ->
       Lwt.return res.U.ai_addr
 
@@ -111,28 +109,28 @@ let main () =
   let buf = Bytes.create !o_buf_size in
   match !o_listen with
   | false ->
-      lookup !o_remote_address !o_remote_port >>= fun addr ->
+      let%lwt addr = lookup !o_remote_address !o_remote_port in
       Printf.eprintf "[ucat] connecting to %s...\n%!" (string_of_sockaddr addr);
       let sock = Utp.socket () in
-      Utp.connect sock addr >>= fun () ->
+      let%lwt () = Utp.connect sock addr in
       Printf.eprintf "[ucat] connected to %s\n%!" (string_of_sockaddr addr);
       let rec loop () =
-        U.read U.stdin buf 0 (Bytes.length buf) >>= fun len ->
+        let%lwt len = U.read U.stdin buf 0 (Bytes.length buf) in
         Printf.eprintf "[ucat] read %d bytes from stdin\n%!" len;
-        complete (Utp.write sock) buf 0 len >>=
-        loop
+        let%lwt () = complete (Utp.write sock) buf 0 len in
+        loop ()
       in
       loop ()
   | true ->
       let rec loop sock =
-        Utp.read sock buf 0 (Bytes.length buf) >>= fun len ->
+        let%lwt len = Utp.read sock buf 0 (Bytes.length buf) in
         Printf.eprintf "[ucat] read %d bytes\n%!" len;
-        complete (U.write U.stdout) buf 0 len >>= fun () ->
+        let%lwt () = complete (U.write U.stdout) buf 0 len in
         loop sock
       in
-      lookup !o_local_address !o_local_port >>= fun addr ->
+      let%lwt addr = lookup !o_local_address !o_local_port in
       Utp.bind addr;
-      Utp.accept () >>= fun (sock, _) ->
+      let%lwt sock, _ = Utp.accept () in
       Printf.eprintf "ucat: connection accepted\n%!";
       loop sock
 
