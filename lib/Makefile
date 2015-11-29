@@ -2,10 +2,18 @@ OCAMLFIND = ocamlfind
 OCAMLC = ocamlc
 OCAMLOPT = ocamlopt
 LIBUTP_DIR = ../libutp
-LIBUTP_OBJS = utp_internal.o utp_utils.o utp_hash.o utp_callbacks.o utp_api.o utp_packedsockaddr.o
 
-lib: utp.cmo utp.cmx utpstubs.o socketaddr.o unixsupport.o $(addprefix $(LIBUTP_DIR)/,$(LIBUTP_OBJS))
-	$(OCAMLFIND) ocamlmklib -package lwt.unix -o utp -cclib -lstdc++ $^
+all: libutp.a utp.cma utp.cmxa
+
+libutp.a: $(LIBUTP_DIR)/libutp.a utpstubs.o socketaddr.o unixsupport.o
+	cp $(LIBUTP_DIR)/libutp.a .
+	ar rvs libutp.a utpstubs.o socketaddr.o unixsupport.o
+
+utp.cma: utp.cmo libutp.a
+	$(OCAMLFIND) ocamlc -package lwt.unix -a -o utp.cma -custom -cclib -lstdc++ utp.cmo -cclib -lutp
+
+utp.cmxa: utp.cmx libutp.a
+	$(OCAMLFIND) ocamlopt -package lwt.unix -a -o utp.cmxa -cclib -lstdc++ utp.cmx -cclib -lutp
 
 utp.cmo: utp.mli utp.ml
 	$(OCAMLFIND) ocamlc -package lwt.unix -c $^
