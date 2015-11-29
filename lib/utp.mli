@@ -16,17 +16,9 @@
    along with this library; if not, write to the Free Software Foundation, Inc.,
    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA *)
 
-type utp_socket
+type socket
 
-val socket : unit -> utp_socket
-val connect : utp_socket -> Unix.sockaddr -> unit Lwt.t
-val bind : Unix.sockaddr -> unit
-val accept : unit -> (utp_socket * Unix.sockaddr) Lwt.t
-val read : utp_socket -> bytes -> int -> int -> int Lwt.t
-val write : utp_socket -> bytes -> int -> int -> int Lwt.t
-val close : utp_socket -> unit Lwt.t
-
-type utp_socket_stats =
+type socket_stats =
   {
     nbytes_recv : int;
     nbytes_xmit : int;
@@ -38,4 +30,11 @@ type utp_socket_stats =
     mtu_guess : int;
   }
 
-val get_stats : utp_socket -> utp_socket_stats
+val socket : unit -> socket
+val connect : socket -> Unix.sockaddr -> unit Lwt.t
+val bind : Unix.sockaddr -> unit
+val accept : unit -> (socket * Unix.sockaddr) Lwt.t
+val read : socket -> bytes -> int -> int -> int Lwt.t
+val write : socket -> bytes -> int -> int -> int Lwt.t
+val close : socket -> unit Lwt.t
+val get_stats : socket -> socket_stats

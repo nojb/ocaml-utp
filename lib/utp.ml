@@ -16,10 +16,22 @@
    along with this library; if not, write to the Free Software Foundation, Inc.,
    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA *)
 
-type utp_context
-type utp_socket
+type context
+type socket
 
-type user_data =
+type socket_stats =
+  {
+    nbytes_recv : int;
+    nbytes_xmit : int;
+    rexmit : int;
+    fastrexmit : int;
+    nxmit : int;
+    nrecv : int;
+    nduprecv : int;
+    mtu_guess : int;
+  }
+
+type socket_info =
   {
     connected : unit Lwt.u;
     connecting : unit Lwt.t;
@@ -32,23 +44,24 @@ type user_data =
     writers : int Lwt.u Lwt_sequence.t;
   }
 
-external utp_init : int -> utp_context = "caml_utp_init"
-external utp_destroy : utp_context -> unit = "caml_utp_destroy"
-external utp_create_socket : utp_context -> utp_socket = "caml_utp_create_socket"
-external utp_get_userdata : utp_socket -> user_data = "caml_utp_get_userdata"
-external utp_set_userdata : utp_socket -> user_data -> unit = "caml_utp_set_userdata"
-external utp_write : utp_socket -> bytes -> int -> int -> int = "caml_utp_write"
-external utp_read_drained : utp_socket -> unit = "caml_utp_read_drained"
-external utp_issue_deferred_acks : utp_context -> unit = "caml_utp_issue_deferred_acks"
-external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
-external utp_process_udp : utp_context -> Lwt_bytes.t -> int -> Unix.sockaddr -> int = "caml_utp_process_udp"
-external utp_connect : utp_socket -> Unix.sockaddr -> unit = "caml_utp_connect"
-external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
-external utp_close : utp_socket -> unit = "caml_utp_close"
+external utp_init : int -> context = "caml_utp_init"
+external utp_destroy : context -> unit = "caml_utp_destroy"
+external utp_create_socket : context -> socket = "caml_utp_create_socket"
+external utp_get_userdata : socket -> socket_info = "caml_utp_get_userdata"
+external utp_set_userdata : socket -> socket_info -> unit = "caml_utp_set_userdata"
+external utp_write : socket -> bytes -> int -> int -> int = "caml_utp_write"
+external utp_read_drained : socket -> unit = "caml_utp_read_drained"
+external utp_issue_deferred_acks : context -> unit = "caml_utp_issue_deferred_acks"
+external utp_check_timeouts : context -> unit = "caml_utp_check_timeouts"
+external utp_process_udp : context -> Lwt_bytes.t -> int -> Unix.sockaddr -> int = "caml_utp_process_udp"
+external utp_connect : socket -> Unix.sockaddr -> unit = "caml_utp_connect"
+external utp_check_timeouts : context -> unit = "caml_utp_check_timeouts"
+external utp_close : socket -> unit = "caml_utp_close"
+external utp_get_stats : socket -> socket_stats = "caml_utp_get_stats"
 
 let the_socket = Lwt_unix.socket Lwt_unix.PF_INET Lwt_unix.SOCK_DGRAM 0
 let the_context = utp_init 2
-let accepting : (utp_socket * Unix.sockaddr) Lwt.u Lwt_sequence.t = Lwt_sequence.create ()
+let accepting : (socket * Unix.sockaddr) Lwt.u Lwt_sequence.t = Lwt_sequence.create ()
 
 let null = Lwt_bytes.create 0
 
@@ -221,20 +234,6 @@ let on_state_change sock st =
       utp_close sock
   | STATE_DESTROYING ->
       Lwt.wakeup info.closed ()
-
-type utp_socket_stats =
-  {
-    nbytes_recv : int;
-    nbytes_xmit : int;
-    rexmit : int;
-    fastrexmit : int;
-    nxmit : int;
-    nrecv : int;
-    nduprecv : int;
-    mtu_guess : int;
-  }
-
-external utp_get_stats : utp_socket -> utp_socket_stats = "caml_utp_get_stats"
 
 let get_stats sock =
   utp_get_stats sock
