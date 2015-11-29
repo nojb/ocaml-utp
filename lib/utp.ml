@@ -55,6 +55,9 @@ let accepting : (utp_socket * Unix.sockaddr) Lwt.u Lwt_sequence.t = Lwt_sequence
 
 let null = Lwt_bytes.create 0
 
+let bind addr =
+  Lwt_unix.bind the_socket addr
+
 let socket () =
   let connecting, connected = Lwt.wait () in
   let closing, closed = Lwt.wait () in

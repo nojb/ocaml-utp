@@ -91,6 +91,8 @@ let main () =
         complete (Lwt_unix.write Lwt_unix.stdout) buf 0 len >>= fun () ->
         loop sock
       in
+      let addr = Unix.ADDR_INET (Unix.inet_addr_of_string !o_local_address, !o_local_port) in
+      Utp.bind addr;
       Utp.accept () >>= fun (sock, _) ->
       loop sock
 
