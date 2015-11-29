@@ -86,7 +86,12 @@ let main () =
       in
       loop ()
   | true ->
-      Lwt.return_unit
+      let rec loop () =
+        Utp.read sock buf 0 (Bytes.length buf) >>= fun len ->
+        complete (Lwt_unix.write Lwt_unix.stdout) buf 0 len >>=
+        loop
+      in
+      loop ()
 
 let () =
   try
