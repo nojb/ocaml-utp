@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <string.h>
 
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
@@ -59,6 +60,44 @@ static uint64 utp_on_error(utp_callback_arguments *a)
   return 0;
 }
 
+static uint64 utp_on_sendto(utp_callback_arguments *a)
+{
+  union sock_addr_union sock_addr;
+  socklen_param_type sock_addr_len;
+  value addr;
+  value buf;
+
+  sock_addr_len = sizeof (struct sockaddr_in);
+  memcpy(&sock_addr.s_inet, (struct sockaddr_in *)a->address, sock_addr_len);
+  addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
+  buf = caml_ba_alloc_dims(CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *)a->buf, a->len);
+
+  caml_callback3(*caml_named_value("caml_utp_on_sendto"), (value)a->socket, addr, buf);
+
+  return 0;
+}
+
+static uint64 utp_on_log(utp_callback_arguments *a)
+{
+  value str;
+
+  str = caml_alloc_string(strlen((char *)a->buf));
+  strcpy(String_val(str), (char *)a->buf);
+  caml_callback2(*caml_named_value("caml_utp_on_log"), (value)a->socket, str);
+
+  return 0;
+}
+
+static uint64 utp_on_accept(utp_callback_arguments *a)
+{
+  return 0;
+}
+
+static uint64 utp_on_firewall(utp_callback_arguments *a)
+{
+  return 0;
+}
+
 CAMLprim value caml_utp_get_userdata(value sock)
 {
   return *(value *)(utp_get_userdata((utp_socket *)sock));
@@ -66,15 +105,25 @@ CAMLprim value caml_utp_get_userdata(value sock)
 
 CAMLprim value caml_utp_init(value version)
 {
-  utp_context *ctx =utp_init(Int_val(version));
-  utp_set_callback(ctx, UTP_ON_READ, utp_on_read);
-  utp_set_callback(ctx, UTP_ON_STATE_CHANGE, utp_on_state_change);
-  return (value)ctx;
+  utp_context *utp_ctx;
+
+  utp_ctx = utp_init(Int_val(version));
+
+  utp_set_callback(utp_ctx, UTP_ON_READ, utp_on_read);
+  utp_set_callback(utp_ctx, UTP_ON_STATE_CHANGE, utp_on_state_change);
+  utp_set_callback(utp_ctx, UTP_SENDTO, utp_on_sendto);
+  utp_set_callback(utp_ctx, UTP_LOG, utp_on_log);
+  utp_set_callback(utp_ctx, UTP_ON_ERROR, utp_on_error);
+  utp_set_callback(utp_ctx, UTP_ON_ACCEPT, utp_on_accept);
+  utp_set_callback(utp_ctx, UTP_ON_FIREWALL, utp_on_firewall);
+
+  return (value)utp_ctx;
 }
 
 CAMLprim value caml_utp_destroy(value ctx)
 {
   utp_destroy((utp_context *)ctx);
+
   return Val_unit;
 }
 
@@ -87,6 +136,7 @@ CAMLprim value caml_utp_read_drained(value sock)
 CAMLprim value caml_utp_issue_deferred_acks(value ctx)
 {
   utp_issue_deferred_acks((utp_context *)ctx);
+
   return Val_unit;
 }
 
@@ -94,28 +144,36 @@ CAMLprim value caml_utp_process_udp(value ctx, value buf, value len, value sa)
 {
   union sock_addr_union addr;
   socklen_param_type addr_len;
+  int handled;
+
   get_sockaddr(sa, &addr, &addr_len);
-  int n = utp_process_udp((utp_context *)ctx, Caml_ba_data_val(buf), Int_val(len), &addr.s_gen, addr_len);
-  return Val_int(n);
+  handled = utp_process_udp((utp_context *)ctx, Caml_ba_data_val(buf), Int_val(len), &addr.s_gen, addr_len);
+
+  return Val_int(handled);
 }
 
 CAMLprim value caml_utp_create_socket(value ctx, value data)
 {
-  utp_socket *sock = utp_create_socket((utp_context *)ctx);
-  value *userdata = malloc(sizeof (value));
+  utp_socket *utp_sock;
+  value *userdata;
+
+  utp_sock = utp_create_socket((utp_context *)ctx);
+  userdata = (value *)malloc(sizeof (value));
   *userdata = data;
   caml_register_generational_global_root(userdata);
-  utp_set_userdata(sock, userdata);
-  return (value)sock;
+  utp_set_userdata(utp_sock, userdata);
+
+  return (value)utp_sock;
 }
 
 CAMLprim value caml_utp_connect(value sock, value addr)
 {
-  utp_socket* utp_sock = (utp_socket*)sock;
   union sock_addr_union sock_addr;
   socklen_param_type addr_len;
+
   get_sockaddr(addr, &sock_addr, &addr_len);
-  utp_connect(utp_sock, &sock_addr.s_gen, addr_len);
+  utp_connect((utp_socket *)sock, &sock_addr.s_gen, addr_len);
+
   return Val_unit;
 }
 

@@ -2,6 +2,7 @@ OCAMLFIND = ocamlfind
 OCAMLC = ocamlc
 OCAMLOPT = ocamlopt
 LIBUTP_DIR = ../libutp
+CFLAGS = -Wall
 
 all: libutp.a utp.cma utp.cmxa
 
@@ -22,7 +23,7 @@ utp.cmx: utp.mli utp.ml
 	$(OCAMLFIND) ocamlopt -package lwt.unix -c $^
 
 %.o: %.c
-	ocamlopt -ccopt -I -ccopt $(LIBUTP_DIR) -o $@ -c $<
+	ocamlopt -ccopt -I$(LIBUTP_DIR) -ccopt $(CFLAGS) -o $@ -c $<
 
 clean:
 	rm -f *.cmo *.cmx *.cma *.cmxa *.cmi *.a *.o *.so

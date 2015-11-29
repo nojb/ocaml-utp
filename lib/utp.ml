@@ -120,6 +120,12 @@ type error =
   | ECONNRESET
   | ETIMEDOUT
 
+let on_sendto sock addr buf =
+  Lwt.ignore_result (Lwt_bytes.sendto the_socket buf 0 (Lwt_bytes.length buf) [] addr)
+
+let on_log _sock str =
+  Printf.eprintf "[UTP] %s" str
+
 let on_error sock err =
   let info = utp_get_userdata sock in
   match err with
@@ -178,7 +184,9 @@ let on_state_change sock st =
       write_data sock
   | STATE_WRITABLE ->
       write_data sock
-
+  | STATE_EOF
+  | STATE_DESTROYING ->
+      () (* FIXME *)
 
 type utp_socket_stats =
   {
@@ -200,4 +208,6 @@ let get_stats sock =
 let () =
   Callback.register "caml_utp_on_read" on_read;
   Callback.register "caml_utp_on_state_change" on_state_change;
-  Callback.register "caml_utp_on_error" on_error
+  Callback.register "caml_utp_on_error" on_error;
+  Callback.register "caml_utp_on_sendto" on_sendto;
+  Callback.register "caml_utp_on_log" on_log
