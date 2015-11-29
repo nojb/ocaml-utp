@@ -91,7 +91,6 @@ let accept () =
 let read sock wbuf woff wlen =
   Printf.eprintf "[utp] read: woff = %d wlen = %d\n%!" woff wlen;
   let userdata = utp_get_userdata sock in
-  Printf.eprintf "A\n%!";
   let len = Lwt_bytes.length userdata.read_buf in
   if Queue.is_empty userdata.to_read && len > 0 then begin
     let n = min len wlen in
@@ -104,6 +103,7 @@ let read sock wbuf woff wlen =
     end;
     Lwt.return n
   end else begin
+    Printf.eprintf "[utp] read: waiting for data\n%!";
     Queue.push (wbuf, woff, wlen) userdata.to_read;
     Lwt.add_task_l userdata.readers
   end
@@ -129,10 +129,24 @@ let network_loop ctx =
 let () =
   Lwt.ignore_result (network_loop the_context)
 
+let write_data sock =
+  let userdata = utp_get_userdata sock in
+  let n = ref max_int in
+  while 0 < !n && 0 < Queue.length userdata.to_write do
+    let wbuf, woff, wlen = Queue.top userdata.to_write in
+    n := utp_write sock wbuf woff wlen;
+    if 0 < !n then begin
+      ignore (Queue.pop userdata.to_write);
+      Lwt.wakeup_later (Lwt_sequence.take_r userdata.writers) !n
+    end
+  done
+
 let write sock buf off len =
   let info = utp_get_userdata sock in
   Queue.push (buf, off, len) info.to_write;
-  Lwt.add_task_l info.writers
+  let t = Lwt.add_task_l info.writers in
+  write_data sock;
+  t
 
 type error =
   | ECONNREFUSED
@@ -140,7 +154,13 @@ type error =
   | ETIMEDOUT
 
 let on_sendto sock addr buf =
-  Lwt.ignore_result (Lwt_bytes.sendto the_socket buf 0 (Lwt_bytes.length buf) [] addr)
+  let open Lwt.Infix in
+  let t =
+    Lwt_bytes.sendto the_socket buf 0 (Lwt_bytes.length buf) [] addr >>= fun n ->
+    Printf.eprintf "[utp] wrote %d bytes via sendto\n%!" n;
+    Lwt.return n
+  in
+  Lwt.ignore_result t
 
 let on_log _sock str =
   Printf.eprintf "[UTP] %s" str
@@ -156,6 +176,7 @@ let on_error sock err =
       prerr_endline "ETIMEDOUT"
 
 let on_read sock buf =
+  Printf.eprintf "[utp] on_read\n%!";
   let userdata = utp_get_userdata sock in
   assert (Lwt_bytes.length userdata.read_buf = 0);
   if Queue.is_empty userdata.to_read then
@@ -176,18 +197,6 @@ let on_read sock buf =
     else
       utp_read_drained sock
   end
-
-let write_data sock =
-  let userdata = utp_get_userdata sock in
-  let n = ref max_int in
-  while 0 < !n && 0 < Queue.length userdata.to_write do
-    let wbuf, woff, wlen = Queue.top userdata.to_write in
-    n := utp_write sock wbuf woff wlen;
-    if 0 < !n then begin
-      ignore (Queue.pop userdata.to_write);
-      Lwt.wakeup_later (Lwt_sequence.take_r userdata.writers) !n
-    end
-  done
 
 let on_accept sock addr =
   match Lwt_sequence.take_opt_r accepting with

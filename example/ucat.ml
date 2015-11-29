@@ -79,8 +79,10 @@ let main () =
       let addr = Unix.ADDR_INET (Unix.inet_addr_of_string !o_remote_address, !o_remote_port) in
       let sock = Utp.socket () in
       Utp.connect sock addr >>= fun () ->
+      Printf.eprintf "[ucat] connected\n%!";
       let rec loop () =
         Lwt_unix.read Lwt_unix.stdin buf 0 (Bytes.length buf) >>= fun len ->
+        Printf.eprintf "[ucat] read %d bytes from stdin\n%!" len;
         complete (Utp.write sock) buf 0 len >>=
         loop
       in
@@ -88,6 +90,7 @@ let main () =
   | true ->
       let rec loop sock =
         Utp.read sock buf 0 (Bytes.length buf) >>= fun len ->
+        Printf.eprintf "[ucat] read %d bytes\n%!" len;
         complete (Lwt_unix.write Lwt_unix.stdout) buf 0 len >>= fun () ->
         loop sock
       in
