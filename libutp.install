@@ -7,7 +7,7 @@ lib: [
   "lib/libutp.a" {"libutp.a"}
 ]
 bin: [
-  "example/ucat" {"ucat"}
+  "bin/ucat" {"ucat"}
 ]
 doc: [
   "README.md" {"README.md"}
