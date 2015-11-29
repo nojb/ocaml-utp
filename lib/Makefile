@@ -25,6 +25,12 @@ utp.cmx: utp.mli utp.ml
 %.o: %.c
 	ocamlopt -ccopt -I$(LIBUTP_DIR) -ccopt $(CFLAGS) -o $@ -c $<
 
+install: all
+	$(OCAMLFIND) install utp META utp.cma utp.cmxa libutp.a
+
+uninstall:
+	$(OCAMLFIND) remove utp
+
 clean:
 	rm -f *.cmo *.cmx *.cma *.cmxa *.cmi *.a *.o *.so
 
