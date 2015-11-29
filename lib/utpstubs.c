@@ -90,6 +90,8 @@ static uint64 utp_on_log(utp_callback_arguments *a)
 
 static uint64 utp_on_accept(utp_callback_arguments *a)
 {
+  caml_callback(*caml_named_value("caml_utp_on_accept"), (value)a->socket);
+
   return 0;
 }
 

@@ -170,6 +170,9 @@ let write_data sock =
     end
   done
 
+let on_accept sock =
+  write_data sock
+
 type state =
   | STATE_CONNECT
   | STATE_WRITABLE
@@ -210,4 +213,5 @@ let () =
   Callback.register "caml_utp_on_state_change" on_state_change;
   Callback.register "caml_utp_on_error" on_error;
   Callback.register "caml_utp_on_sendto" on_sendto;
-  Callback.register "caml_utp_on_log" on_log
+  Callback.register "caml_utp_on_log" on_log;
+  Callback.register "caml_utp_on_accept" on_accept
