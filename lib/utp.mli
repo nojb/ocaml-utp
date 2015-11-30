@@ -39,4 +39,4 @@ val accept : context -> (socket * Unix.sockaddr) Lwt.t
 val read : socket -> bytes -> int -> int -> int Lwt.t
 val write : socket -> bytes -> int -> int -> int Lwt.t
 val close : socket -> unit Lwt.t
-val get_stats : socket -> socket_stats
+val get_socket_stats : socket -> socket_stats
