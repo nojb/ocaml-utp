@@ -203,24 +203,28 @@ let on_sendto utp_ctx addr buf =
 let on_log _sock str =
   Printf.eprintf "[UTP] %s" str
 
+let cancel_io info =
+  Lwt_sequence.iter_node_r (fun node ->
+      Lwt_sequence.remove node;
+      let u = Lwt_sequence.get node in
+      Lwt.wakeup_later_exn u End_of_file
+    ) info.readers;
+  Lwt_sequence.iter_node_r (fun node ->
+      Lwt_sequence.remove node;
+      let u = Lwt_sequence.get node in
+      Lwt.wakeup_later_exn u End_of_file
+    ) info.writers;
+  Lwt.wakeup_exn info.connected End_of_file
+
 let on_error sock err =
   let info = utp_get_userdata sock in
+  cancel_io info;
   match err with
   | ECONNREFUSED
   | ETIMEDOUT ->
       Lwt.wakeup_exn info.connected (Failure "connection failed")
   | ECONNRESET ->
-      Lwt_sequence.iter_node_r (fun node ->
-          Lwt_sequence.remove node;
-          let u = Lwt_sequence.get node in
-          Lwt.wakeup_later_exn u End_of_file
-        ) info.readers;
-      Lwt_sequence.iter_node_r (fun node ->
-          Lwt_sequence.remove node;
-          let u = Lwt_sequence.get node in
-          Lwt.wakeup_later_exn u End_of_file
-        ) info.writers;
-      Lwt.wakeup_exn info.connected End_of_file
+      () (* CHECK *)
 
 let on_accept sock addr =
   let utp_ctx = utp_get_context sock in
@@ -247,7 +251,8 @@ let on_state_change sock st =
   | STATE_WRITABLE ->
       on_writeable sock
   | STATE_EOF ->
-      utp_close sock
+      utp_close sock;
+      cancel_io info
   | STATE_DESTROYING ->
       Lwt.wakeup info.closed ()
 
