@@ -29,6 +29,12 @@ let o_numeric = ref false
 let o_remote_port = ref 0
 let o_remote_address = ref ""
 
+let red s =
+  Printf.sprintf "\x1B[31m%s\x1B[0m" s
+
+let yellow s =
+  Printf.sprintf "\x1B[93m%s\x1B[0m" s
+
 let spec =
   let open Arg in
   align
@@ -90,6 +96,23 @@ let string_of_sockaddr = function
   | U.ADDR_INET (ip, port) ->
       Printf.sprintf "%s:%d" (Unix.string_of_inet_addr ip) port
 
+let debug fmt =
+  if !o_debug > 0 then
+    Printf.eprintf ("%s " ^^ fmt ^^ "\n%!") (yellow "DEBUG:")
+  else
+    Printf.ifprintf stderr fmt
+
+let print_stats stats =
+  debug "Socket Statistics:";
+  debug "    Bytes sent:          %d" stats.Utp.nbytes_xmit;
+  debug "    Bytes received:      %d" stats.Utp.nbytes_recv;
+  debug "    Packets received:    %d" stats.Utp.nrecv;
+  debug "    Packets sent:        %d" stats.Utp.nxmit;
+  debug "    Duplicate receives:  %d" stats.Utp.nduprecv;
+  debug "    Retransmits:         %d" stats.Utp.rexmit;
+  debug "    Fast Retransmits:    %d" stats.Utp.fastrexmit;
+  debug "    Best guess at MTU:   %d" stats.Utp.mtu_guess
+
 let main () =
   Arg.parse spec anon_fun usage_msg;
 
@@ -100,18 +123,20 @@ let main () =
     raise Exit;
 
   let buf = Bytes.create !o_buf_size in
+  debug "Allocated %d buffer" !o_buf_size;
+
   let ctx = Utp.context () in
 
   match !o_listen with
   | false ->
       let%lwt addr = lookup !o_remote_address !o_remote_port in
-      Printf.eprintf "[ucat] connecting to %s...\n%!" (string_of_sockaddr addr);
+      debug "Connecting to %s..." (string_of_sockaddr addr);
       let sock = Utp.socket ctx in
       let%lwt () = Utp.connect sock addr in
-      Printf.eprintf "[ucat] connected to %s\n%!" (string_of_sockaddr addr);
+      debug "Connected to %s" (string_of_sockaddr addr);
       let rec loop () =
         let%lwt len = U.read U.stdin buf 0 (Bytes.length buf) in
-        Printf.eprintf "[ucat] read %d bytes from stdin\n%!" len;
+        debug "Read %d bytes from stdin" len;
         let%lwt () = complete (Utp.write sock) buf 0 len in
         loop ()
       in
@@ -119,14 +144,14 @@ let main () =
   | true ->
       let rec loop sock =
         let%lwt len = Utp.read sock buf 0 (Bytes.length buf) in
-        Printf.eprintf "[ucat] read %d bytes\n%!" len;
+        debug "Read %d bytes" len;
         let%lwt () = complete (U.write U.stdout) buf 0 len in
         loop sock
       in
       let%lwt addr = lookup !o_local_address !o_local_port in
       Utp.bind ctx addr;
-      let%lwt sock, _ = Utp.accept ctx in
-      Printf.eprintf "ucat: connection accepted\n%!";
+      let%lwt sock, addr = Utp.accept ctx in
+      debug "Connection accepted from %s" (string_of_sockaddr addr);
       loop sock
 
 let () =
@@ -137,5 +162,5 @@ let () =
       Arg.usage spec usage_msg;
       exit 2
   | Failure s ->
-      Printf.eprintf "\x1B[31mFATAL:\x1B[0m %s\n%!" s;
+      Printf.eprintf "%s %s\n%!" (red "FATAL:") s;
       exit 1
