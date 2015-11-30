@@ -33,7 +33,7 @@
 
 static uint64 callback_on_read(utp_callback_arguments* a)
 {
-  fprintf(stderr, "callback_on_read\n");
+  /* fprintf(stderr, "callback_on_read\n"); */
   value ba = caml_ba_alloc_dims(CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *)a->buf, a->len);
   caml_callback2 (*caml_named_value("caml_utp_on_read"), (value)a->socket, ba);
   return 0;

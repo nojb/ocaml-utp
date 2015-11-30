@@ -138,24 +138,30 @@ let main () =
       let%lwt () = Utp.connect sock addr in
       debug "Connected to %s" (string_of_sockaddr addr);
       let rec loop () =
-        let%lwt len = U.read U.stdin buf 0 (Bytes.length buf) in
+        let%lwt len = Lwt_io.read_into Lwt_io.stdin buf 0 (Bytes.length buf) in
         debug "Read %d bytes from stdin" len;
-        let%lwt () = complete (Utp.write sock) buf 0 len in
-        loop ()
+        complete (Utp.write sock) buf 0 len >> loop ()
       in
       loop ()
   | true ->
-      let rec loop sock =
+      let rec echo id sock =
         let%lwt len = Utp.read sock buf 0 (Bytes.length buf) in
-        debug "Read %d bytes" len;
-        let%lwt () = complete (U.write U.stdout) buf 0 len in
-        loop sock
+        Lwt_io.printlf ">>>%d>>>%d" id len >>
+        Lwt_io.write_from_exactly Lwt_io.stdout buf 0 len >>
+        Lwt_io.printlf ">>>" >>
+        echo id sock
       in
       let%lwt addr = lookup !o_local_address !o_local_port in
       Utp.bind ctx addr;
-      let%lwt sock, addr = Utp.accept ctx in
-      debug "Connection accepted from %s" (string_of_sockaddr addr);
-      loop sock
+      let id = ref (-1) in
+      let rec loop () =
+        incr id;
+        let%lwt sock, addr = Utp.accept ctx in
+        debug "Connection accepted from %s" (string_of_sockaddr addr);
+        Lwt.async (fun () -> echo !id sock);
+        loop ()
+      in
+      loop ()
 
 let () =
   try
