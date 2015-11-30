@@ -132,7 +132,6 @@ let accept ctx =
   Lwt.add_task_l ctx.accepting
 
 let read sock wbuf woff wlen =
-  Printf.eprintf "[utp] read: woff = %d wlen = %d\n%!" woff wlen;
   let info = utp_get_userdata sock in
   let rec try_read () =
     let len = Lwt_bytes.length info.read_buf - info.read_off in
@@ -151,13 +150,10 @@ let read sock wbuf woff wlen =
   in
   if Lwt_sequence.is_empty info.readers then
     try_read ()
-  else begin
-    Printf.eprintf "[utp] read: waiting for data\n%!";
+  else
     Lwt.add_task_l info.readers >>= try_read
-  end
 
 let on_read sock buf =
-  Printf.eprintf "[utp] on_read\n%!";
   let info = utp_get_userdata sock in
   assert (Lwt_bytes.length info.read_buf = info.read_off);
   info.read_off <- 0;
@@ -195,9 +191,7 @@ type error =
 let on_sendto utp_ctx addr buf =
   let ctx = utp_context_get_userdata utp_ctx in
   let t =
-    Lwt_bytes.sendto ctx.fd buf 0 (Lwt_bytes.length buf) [] addr >>= fun n ->
-    Printf.eprintf "[utp] wrote %d bytes via sendto\n%!" n;
-    Lwt.return n
+    Lwt_bytes.sendto ctx.fd buf 0 (Lwt_bytes.length buf) [] addr
   in
   Lwt.ignore_result t
 
@@ -207,12 +201,11 @@ let on_log _sock str =
 let on_error sock err =
   let info = utp_get_userdata sock in
   match err with
-  | ECONNREFUSED ->
-      Lwt.wakeup_exn info.connected (Failure "connection refused")
+  | ECONNREFUSED
+  | ETIMEDOUT ->
+      Lwt.wakeup_exn info.connected (Failure "connection failed")
   | ECONNRESET ->
       prerr_endline "ECONNRESET"
-  | ETIMEDOUT ->
-      prerr_endline "ETIMEDOUT"
 
 let on_accept sock addr =
   let utp_ctx = utp_get_context sock in
@@ -223,7 +216,6 @@ let on_accept sock addr =
       let info = create_info () in
       utp_set_userdata sock info;
       Lwt.wakeup u (sock, addr)
-  (* write_data sock *)
 
 type state =
   | STATE_CONNECT

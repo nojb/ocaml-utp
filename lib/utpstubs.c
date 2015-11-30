@@ -41,7 +41,7 @@ static uint64 callback_on_read(utp_callback_arguments* a)
 
 static uint64 callback_on_state_change(utp_callback_arguments *a)
 {
-  fprintf(stderr, "callback_on_state_change\n");
+  /* fprintf(stderr, "callback_on_state_change\n"); */
   int state;
   switch (a->state) {
   case UTP_STATE_CONNECT:
@@ -66,7 +66,7 @@ static uint64 callback_on_state_change(utp_callback_arguments *a)
 
 static uint64 callback_on_error(utp_callback_arguments *a)
 {
-  fprintf(stderr, "callback_on_error");
+  /* fprintf(stderr, "callback_on_error"); */
   int i;
   switch (a->error_code) {
   case UTP_ECONNREFUSED:
@@ -85,7 +85,7 @@ static uint64 callback_on_error(utp_callback_arguments *a)
 
 static uint64 callback_on_sendto(utp_callback_arguments *a)
 {
-  fprintf(stderr, "callback_on_sendto\n");
+  /* fprintf(stderr, "callback_on_sendto\n"); */
   union sock_addr_union sock_addr;
   socklen_param_type sock_addr_len;
   value addr;
@@ -103,7 +103,7 @@ static uint64 callback_on_sendto(utp_callback_arguments *a)
 
 static uint64 callback_on_log(utp_callback_arguments *a)
 {
-  fprintf(stderr, "callback_on_log\n");
+  /* fprintf(stderr, "callback_on_log\n"); */
   value str;
 
   str = caml_alloc_string(strlen((char *)a->buf));
@@ -115,7 +115,7 @@ static uint64 callback_on_log(utp_callback_arguments *a)
 
 static uint64 callback_on_accept(utp_callback_arguments *a)
 {
-  fprintf(stderr, "callback_on_accept\n");
+  /* fprintf(stderr, "callback_on_accept\n"); */
 
   union sock_addr_union sock_addr;
   socklen_param_type sock_addr_len;
@@ -132,7 +132,7 @@ static uint64 callback_on_accept(utp_callback_arguments *a)
 
 static uint64 callback_on_firewall(utp_callback_arguments *a)
 {
-  fprintf(stderr, "callback_on_firewall\n");
+  /* fprintf(stderr, "callback_on_firewall\n"); */
   return 0;
 }
 
