@@ -1,21 +1,54 @@
-all: libutp lib bin
+LIBUTP_DIR = libutp/
+LIB_DIR = lib/
+BIN_DIR = bin/
+OCAMLFIND = ocamlfind
+OCAMLOPT = ocamlopt
+CFLAGS = -Wall -I `ocamlfind printconf stdlib`
+CC = cc
 
-libutp:
-	$(MAKE) -C libutp
+all: ucat ucat.opt $(LIB_DIR)utp.cma $(LIB_DIR)utp.cmxa $(LIB_DIR)libutpstubs.a $(LIBUTP_DIR)libutp.a
 
-lib: libutp
-	$(MAKE) -C lib
+$(LIBUTP_DIR)libutp.a:
+	$(MAKE) -C $(LIBUTP_DIR) libutp.a
 
-bin: lib
-	$(MAKE) -C bin
+$(LIB_DIR)utp.cma: $(LIB_DIR)utp.cmo $(LIB_DIR)libutpstubs.a $(LIBUTP_DIR)libutp.a
+	$(OCAMLFIND) ocamlc -package lwt.unix -a -o $@ -custom $< -cclib -lutpstubs -cclib -lutp -cclib -lstdc++
 
-doc install uninstall:
-	$(MAKE) -C lib $@
+$(LIB_DIR)utp.cmxa: $(LIB_DIR)utp.cmx $(LIB_DIR)libutpstubs.a $(LIBUTP_DIR)libutp.a
+	$(OCAMLFIND) ocamlopt -package lwt.unix -a -o $@ $< -cclib -lutpstubs -cclib -lutp -cclib -lstdc++
+
+$(LIB_DIR)utp.cmo: $(LIB_DIR)utp.mli $(LIB_DIR)utp.ml
+	$(OCAMLFIND) ocamlc -package lwt.unix -o $@ -c -I $(LIB_DIR) $^
+
+$(LIB_DIR)utp.cmx: $(LIB_DIR)utp.mli $(LIB_DIR)utp.ml
+	$(OCAMLFIND) ocamlopt -package lwt.unix -o $@ -c -I $(LIB_DIR) $^
+
+$(LIB_DIR)libutpstubs.a: $(LIB_DIR)utpstubs.o $(LIB_DIR)socketaddr.o $(LIB_DIR)unixsupport.o
+	ar rvs $@ $(LIB_DIR)utpstubs.o $(LIB_DIR)socketaddr.o $(LIB_DIR)unixsupport.o
+
+%.o: %.c
+	$(CC) -I$(LIBUTP_DIR) $(CFLAGS) -o $@ -c -I$(LIB_DIR) $<
+
+doc: $(LIB_DIR)utp.mli
+	$(OCAMLFIND) ocamldoc -package lwt.unix -d doc -html -colorize-code -css-style style.css $^
+
+ucat: $(BIN_DIR)ucat.ml $(LIB_DIR)libutpstubs.a $(LIBUTP_DIR)libutp.a $(LIB_DIR)utp.cma
+	$(OCAMLFIND) ocamlc -linkpkg -o $@ -package lwt.unix -package lwt.ppx -g -I $(LIB_DIR) -cclib -L$(LIB_DIR) -cclib -L$(LIBUTP_DIR) utp.cma $<
+
+ucat.opt: $(BIN_DIR)ucat.ml $(LIB_DIR)libutpstubs.a $(LIBUTP_DIR)libutp.a $(LIB_DIR)utp.cmxa
+	$(OCAMLFIND) ocamlopt -linkpkg -o $@ -package lwt.unix -package lwt.ppx -g -I $(LIB_DIR) -cclib -L$(LIB_DIR) -cclib -L$(LIBUTP_DIR) utp.cmxa $<
+
+install: $(LIB_DIR)utp.cma $(LIB_DIR)utp.cmxa $(LIB_DIR)libutpstubs.a $(LIBUTP_DIR)libutp.a $(LIB_DIR)META
+	$(OCAMLFIND) install utp $^
+
+uninstall:
+	$(OCAMLFIND) remove utp
 
 clean:
-	$(MAKE) -C lib clean
 	$(MAKE) -C libutp clean
-	$(MAKE) -C bin clean
+	rm -f $(LIB_DIR)*.cm* $(LIB_DIR)*.[oa]
+	rm -f $(BIN_DIR)*.cm* $(BIN_DIR)*.o
+	rm -f ucat ucat.opt
 
 gh-pages: doc
 	git clone `git config --get remote.origin.url` .gh-pages --reference .
@@ -28,4 +61,4 @@ gh-pages: doc
 	git -C .gh-pages push origin gh-pages -f
 	rm -rf .gh-pages
 
-.PHONY: doc lib libutp bin clean install uninstall
+.PHONY: libutp clean install uninstall doc

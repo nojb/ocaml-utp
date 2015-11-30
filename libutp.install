@@ -5,6 +5,7 @@ lib: [
   "lib/utp.cma" {"utp.cma"}
   "lib/utp.cmxa" {"utp.cmxa"}
   "lib/libutp.a" {"libutp.a"}
+  "lib/libutpstubs.a" {"libutpstubs.a"}
 ]
 bin: [
   "bin/ucat" {"ucat"}

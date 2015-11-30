@@ -6,3 +6,5 @@
 *.cmi
 *.cmo
 *.cmx
+ucat
+ucat.opt
