@@ -44,11 +44,10 @@ type socket_info =
     connecting : unit Lwt.t;
     closing : unit Lwt.t;
     closed : unit Lwt.u;
+    mutable read_off : int;
     mutable read_buf : Lwt_bytes.t;
-    to_read : (bytes * int * int) Queue.t;
-    readers : int Lwt.u Lwt_sequence.t;
-    to_write : (bytes * int * int) Queue.t;
-    writers : int Lwt.u Lwt_sequence.t;
+    readers : unit Lwt.u Lwt_sequence.t;
+    writers : unit Lwt.u Lwt_sequence.t;
   }
 
 external utp_init : int -> utp_context = "caml_utp_init"
@@ -68,8 +67,6 @@ external utp_get_stats : socket -> socket_stats = "caml_utp_get_stats"
 external utp_get_context : socket -> utp_context = "caml_utp_get_context"
 external utp_context_get_userdata : utp_context -> context = "caml_utp_context_get_userdata"
 external utp_context_set_userdata : utp_context -> context -> unit = "caml_utp_context_set_userdata"
-
-let null = Lwt_bytes.create 0
 
 open Lwt.Infix
 
@@ -114,10 +111,9 @@ let create_info () =
     connecting;
     closing;
     closed;
-    read_buf = null;
-    to_read = Queue.create ();
+    read_off = 0;
+    read_buf = Lwt_bytes.create 0;
     readers = Lwt_sequence.create ();
-    to_write = Queue.create ();
     writers = Lwt_sequence.create ();
   }
 
@@ -137,42 +133,59 @@ let accept ctx =
 
 let read sock wbuf woff wlen =
   Printf.eprintf "[utp] read: woff = %d wlen = %d\n%!" woff wlen;
-  let userdata = utp_get_userdata sock in
-  let len = Lwt_bytes.length userdata.read_buf in
-  if Queue.is_empty userdata.to_read && len > 0 then begin
-    let n = min len wlen in
-    Lwt_bytes.blit_to_bytes userdata.read_buf 0 wbuf woff n;
-    if n < len then
-      userdata.read_buf <- Lwt_bytes.proxy userdata.read_buf n (len - n)
-    else begin
-      userdata.read_buf <- null;
-      utp_read_drained sock;
-    end;
-    Lwt.return n
-  end else begin
+  let info = utp_get_userdata sock in
+  let rec try_read () =
+    let len = Lwt_bytes.length info.read_buf - info.read_off in
+    if len > 0 then begin
+      let n = min len wlen in
+      Lwt_bytes.blit_to_bytes info.read_buf info.read_off wbuf woff n;
+      info.read_off <- info.read_off + n;
+      if n < len then
+        if Lwt_sequence.length info.readers > 0 then
+          Lwt.wakeup_later (Lwt_sequence.take_r info.readers) ()
+      else
+        utp_read_drained sock;
+      Lwt.return n
+    end else
+      Lwt.add_task_r info.readers >>= try_read
+  in
+  if Lwt_sequence.is_empty info.readers then
+    try_read ()
+  else begin
     Printf.eprintf "[utp] read: waiting for data\n%!";
-    Queue.push (wbuf, woff, wlen) userdata.to_read;
-    Lwt.add_task_l userdata.readers
+    Lwt.add_task_l info.readers >>= try_read
   end
 
-let write_data sock =
-  let userdata = utp_get_userdata sock in
-  let n = ref max_int in
-  while 0 < !n && 0 < Queue.length userdata.to_write do
-    let wbuf, woff, wlen = Queue.top userdata.to_write in
-    n := utp_write sock wbuf woff wlen;
-    if 0 < !n then begin
-      ignore (Queue.pop userdata.to_write);
-      Lwt.wakeup_later (Lwt_sequence.take_r userdata.writers) !n
-    end
-  done
+let on_read sock buf =
+  Printf.eprintf "[utp] on_read\n%!";
+  let info = utp_get_userdata sock in
+  assert (Lwt_bytes.length info.read_buf = info.read_off);
+  info.read_off <- 0;
+  info.read_buf <- buf;
+  if Lwt_sequence.length info.readers > 0 then
+    Lwt.wakeup_later (Lwt_sequence.take_r info.readers) ()
+
+let on_writeable sock =
+  let info = utp_get_userdata sock in
+  if Lwt_sequence.length info.writers > 0 then
+    Lwt.wakeup_later (Lwt_sequence.take_r info.writers) ()
 
 let write sock buf off len =
   let info = utp_get_userdata sock in
-  Queue.push (buf, off, len) info.to_write;
-  let t = Lwt.add_task_l info.writers in
-  write_data sock;
-  t
+  let rec try_write () =
+    let n = utp_write sock buf off len in
+    if n = 0 then
+      Lwt.add_task_r info.writers >>= try_write
+    else begin
+      if Lwt_sequence.length info.writers > 0 then
+        Lwt.wakeup_later (Lwt_sequence.take_r info.writers) ();
+      Lwt.return n
+    end
+  in
+  if Lwt_sequence.is_empty info.writers then
+    try_write ()
+  else
+    Lwt.add_task_l info.writers >>= try_write
 
 type error =
   | ECONNREFUSED
@@ -201,29 +214,6 @@ let on_error sock err =
   | ETIMEDOUT ->
       prerr_endline "ETIMEDOUT"
 
-let on_read sock buf =
-  Printf.eprintf "[utp] on_read\n%!";
-  let userdata = utp_get_userdata sock in
-  assert (Lwt_bytes.length userdata.read_buf = 0);
-  if Queue.is_empty userdata.to_read then
-    userdata.read_buf <- buf
-  else begin
-    let off = ref 0 in
-    let len = ref (Lwt_bytes.length buf) in
-    while 0 < !len && Queue.length userdata.to_read > 0 do
-      let wbuf, woff, wlen = Queue.take userdata.to_read in
-      let n = min !len wlen in
-      Lwt_bytes.blit_to_bytes buf 0 wbuf woff n;
-      off := !off + n;
-      len := !len - n;
-      Lwt.wakeup_later (Lwt_sequence.take_r userdata.readers) n;
-    done;
-    if 0 < !len then
-      userdata.read_buf <- Lwt_bytes.proxy buf !off !len
-    else
-      utp_read_drained sock
-  end
-
 let on_accept sock addr =
   let utp_ctx = utp_get_context sock in
   let ctx = utp_context_get_userdata utp_ctx in
@@ -246,9 +236,9 @@ let on_state_change sock st =
   match st with
   | STATE_CONNECT ->
       Lwt.wakeup info.connected ();
-      write_data sock
+      on_writeable sock
   | STATE_WRITABLE ->
-      write_data sock
+      on_writeable sock
   | STATE_EOF ->
       utp_close sock
   | STATE_DESTROYING ->
