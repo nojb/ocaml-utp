@@ -138,18 +138,25 @@ let main () =
       let%lwt () = Utp.connect sock addr in
       debug "Connected to %s" (string_of_sockaddr addr);
       let rec loop () =
-        let%lwt len = Lwt_io.read_into Lwt_io.stdin buf 0 (Bytes.length buf) in
-        debug "Read %d bytes from stdin" len;
-        complete (Utp.write sock) buf 0 len >> loop ()
+        match%lwt Lwt_io.read_into Lwt_io.stdin buf 0 (Bytes.length buf) with
+        | 0 ->
+            debug "Read EOF from stdin; closing socket";
+            Utp.close sock
+        | len ->
+            debug "Read %d bytes from stdin" len;
+            complete (Utp.write sock) buf 0 len >> loop ()
       in
       loop ()
   | true ->
       let rec echo id sock =
-        let%lwt len = Utp.read sock buf 0 (Bytes.length buf) in
-        Lwt_io.printlf ">>>%d>>>%d" id len >>
-        Lwt_io.write_from_exactly Lwt_io.stdout buf 0 len >>
-        Lwt_io.printlf ">>>" >>
-        echo id sock
+        match%lwt Utp.read sock buf 0 (Bytes.length buf) with
+        | 0 ->
+            Lwt_io.eprintlf ">>>%d EOF" id
+        | len ->
+            Lwt_io.printlf ">>>%d" id >>
+            Lwt_io.write_from_exactly Lwt_io.stdout buf 0 len >>
+            Lwt_io.printlf ">>>" >>
+            echo id sock
       in
       let%lwt addr = lookup !o_local_address !o_local_port in
       Utp.bind ctx addr;

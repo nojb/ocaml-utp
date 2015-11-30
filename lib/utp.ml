@@ -146,7 +146,12 @@ let read sock wbuf woff wlen =
         utp_read_drained sock;
       Lwt.return n
     end else
-      Lwt.add_task_r info.readers >>= try_read
+      Lwt.try_bind
+        (fun () -> Lwt.add_task_r info.readers) try_read
+        (function
+          | End_of_file -> Lwt.return 0
+          | exn -> Lwt.fail exn
+        )
   in
   if Lwt_sequence.is_empty info.readers then
     try_read ()
@@ -205,7 +210,17 @@ let on_error sock err =
   | ETIMEDOUT ->
       Lwt.wakeup_exn info.connected (Failure "connection failed")
   | ECONNRESET ->
-      prerr_endline "ECONNRESET"
+      Lwt_sequence.iter_node_r (fun node ->
+          Lwt_sequence.remove node;
+          let u = Lwt_sequence.get node in
+          Lwt.wakeup_later_exn u End_of_file
+        ) info.readers;
+      Lwt_sequence.iter_node_r (fun node ->
+          Lwt_sequence.remove node;
+          let u = Lwt_sequence.get node in
+          Lwt.wakeup_later_exn u End_of_file
+        ) info.writers;
+      Lwt.wakeup_exn info.connected End_of_file
 
 let on_accept sock addr =
   let utp_ctx = utp_get_context sock in
