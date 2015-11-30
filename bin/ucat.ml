@@ -35,6 +35,15 @@ let red s =
 let yellow s =
   Printf.sprintf "\x1B[93m%s\x1B[0m" s
 
+let debug fmt =
+  if !o_debug > 0 then
+    Printf.eprintf ("%s " ^^ fmt ^^ "\n%!") (yellow "DEBUG:")
+  else
+    Printf.ifprintf stderr fmt
+
+let fatal fmt =
+  Printf.eprintf ("%s " ^^ fmt) (red "FATAL:")
+
 let spec =
   let open Arg in
   align
@@ -96,12 +105,6 @@ let string_of_sockaddr = function
   | U.ADDR_INET (ip, port) ->
       Printf.sprintf "%s:%d" (Unix.string_of_inet_addr ip) port
 
-let debug fmt =
-  if !o_debug > 0 then
-    Printf.eprintf ("%s " ^^ fmt ^^ "\n%!") (yellow "DEBUG:")
-  else
-    Printf.ifprintf stderr fmt
-
 let print_stats stats =
   debug "Socket Statistics:";
   debug "    Bytes sent:          %d" stats.Utp.nbytes_xmit;
@@ -162,5 +165,5 @@ let () =
       Arg.usage spec usage_msg;
       exit 2
   | Failure s ->
-      Printf.eprintf "%s %s\n%!" (red "FATAL:") s;
+      fatal "%s" s;
       exit 1
