@@ -11,10 +11,10 @@ libutp.a: $(LIBUTP_DIR)/libutp.a utpstubs.o socketaddr.o unixsupport.o
 	ar rvs libutp.a utpstubs.o socketaddr.o unixsupport.o
 
 utp.cma: utp.cmo libutp.a
-	$(OCAMLFIND) ocamlc -package lwt.unix -a -o utp.cma -custom -cclib -lstdc++ utp.cmo -cclib -lutp
+	$(OCAMLFIND) ocamlc -package lwt.unix -a -o utp.cma -custom utp.cmo -cclib -lutp -cclib -lstdc++
 
 utp.cmxa: utp.cmx libutp.a
-	$(OCAMLFIND) ocamlopt -package lwt.unix -a -o utp.cmxa -cclib -lstdc++ utp.cmx -cclib -lutp
+	$(OCAMLFIND) ocamlopt -package lwt.unix -a -o utp.cmxa utp.cmx -cclib -lutp -cclib -lstdc++
 
 utp.cmo: utp.mli utp.ml
 	$(OCAMLFIND) ocamlc -package lwt.unix -c $^
