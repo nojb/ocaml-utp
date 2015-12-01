@@ -257,9 +257,15 @@ CAMLprim value caml_utp_connect(value sock, value addr)
 {
   union sock_addr_union sock_addr;
   socklen_param_type addr_len;
+  int res;
 
   get_sockaddr(addr, &sock_addr, &addr_len);
-  utp_connect((utp_socket *)sock, &sock_addr.s_gen, addr_len);
+
+  res = utp_connect((utp_socket *)sock, &sock_addr.s_gen, addr_len);
+
+  if (res < 0) {
+    caml_failwith("utp_connect");
+  }
 
   return Val_unit;
 }
