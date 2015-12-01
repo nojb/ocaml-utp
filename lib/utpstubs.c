@@ -268,21 +268,23 @@ CAMLprim value caml_utp_write(value sock, value buf, value off, value len)
 {
   CAMLparam4(sock, buf, off, len);
 
-  utp_socket *utp_sock;
   ssize_t written;
   void *utp_buf;
 
   utp_buf = String_val(buf) + Int_val(off);
-  utp_sock = (utp_socket *)sock;
-  written = utp_write(utp_sock, utp_buf, Int_val(len));
+  written = utp_write((utp_socket *)sock, utp_buf, Int_val(len));
+
+  if (written < 0) {
+    caml_failwith("utp_write");
+  }
 
   CAMLreturn(Val_int(written));
 }
 
 CAMLprim value caml_utp_check_timeouts(value ctx)
 {
-  utp_context* utp_ctx = (utp_context*)ctx;
-  utp_check_timeouts(utp_ctx);
+  utp_check_timeouts((utp_context *)ctx);
+
   return Val_unit;
 }
 
@@ -292,10 +294,8 @@ CAMLprim value caml_utp_get_stats(value sock)
   CAMLlocal1(stats);
 
   utp_socket_stats *utp_stats;
-  utp_socket *utp_sock;
 
-  utp_sock = (utp_socket *)sock;
-  utp_stats = utp_get_stats(utp_sock);
+  utp_stats = utp_get_stats((utp_socket *)sock);
 
   if (!utp_stats) {
     caml_failwith("utp_get_stats");
@@ -304,7 +304,7 @@ CAMLprim value caml_utp_get_stats(value sock)
   stats = caml_alloc(8, 0);
 
   if (!stats) {
-    caml_raise_out_of_memory();
+    caml_failwith("caml_utp_get_stats");
   }
 
   Store_field(stats, 0, Val_int(utp_stats->nbytes_recv));
