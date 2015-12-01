@@ -31,6 +31,20 @@ type socket_stats =
     mtu_guess : int;
   }
 
+type context_stats =
+  {
+    nraw_recv_empty : int;
+    nraw_recv_small : int;
+    nraw_recv_mid : int;
+    nraw_recv_big : int;
+    nraw_recv_huge : int;
+    nraw_send_empty : int;
+    nraw_send_small : int;
+    nraw_send_mid : int;
+    nraw_send_big : int;
+    nraw_send_huge : int;
+  }
+
 type context =
   {
     utp_ctx : utp_context;
@@ -67,6 +81,7 @@ external utp_get_stats : socket -> socket_stats = "caml_utp_get_stats"
 external utp_get_context : socket -> utp_context = "caml_utp_get_context"
 external utp_context_get_userdata : utp_context -> context = "caml_utp_context_get_userdata"
 external utp_context_set_userdata : utp_context -> context -> unit = "caml_utp_context_set_userdata"
+external utp_get_context_stats : utp_context -> context_stats = "caml_utp_get_context_stats"
 
 open Lwt.Infix
 
@@ -263,6 +278,9 @@ let close sock =
   let info = utp_get_userdata sock in
   utp_close sock;
   info.closing
+
+let get_context_stats ctx =
+  utp_get_context_stats ctx.utp_ctx
 
 let () =
   Callback.register "caml_utp_on_read" on_read;

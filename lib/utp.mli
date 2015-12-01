@@ -31,6 +31,20 @@ type socket_stats =
     mtu_guess : int;
   }
 
+type context_stats =
+  {
+    nraw_recv_empty : int;
+    nraw_recv_small : int;
+    nraw_recv_mid : int;
+    nraw_recv_big : int;
+    nraw_recv_huge : int;
+    nraw_send_empty : int;
+    nraw_send_small : int;
+    nraw_send_mid : int;
+    nraw_send_big : int;
+    nraw_send_huge : int;
+  }
+
 val context : unit -> context
 val socket : context -> socket
 val connect : socket -> Unix.sockaddr -> unit Lwt.t
@@ -40,3 +54,4 @@ val read : socket -> bytes -> int -> int -> int Lwt.t
 val write : socket -> bytes -> int -> int -> int Lwt.t
 val close : socket -> unit Lwt.t
 val get_socket_stats : socket -> socket_stats
+val get_context_stats : context -> context_stats
