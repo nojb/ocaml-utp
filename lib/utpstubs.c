@@ -481,6 +481,7 @@ CAMLprim value caml_utp_context_get_option(value ctx, value opt)
 {
   int utp_opt;
   int val;
+  value res;
 
   switch (Int_val(opt)) {
   case 0:
@@ -507,23 +508,32 @@ CAMLprim value caml_utp_context_get_option(value ctx, value opt)
 
   val = utp_context_get_option((utp_context *)ctx, utp_opt);
 
+  if (val < 0) {
+    caml_failwith("utp_context_get_option");
+  }
+
   switch (utp_opt) {
   case UTP_LOG_NORMAL:
   case UTP_LOG_MTU:
   case UTP_LOG_DEBUG:
-    return Val_bool(val);
+    res = Val_bool(val);
+    break;
   case UTP_SNDBUF:
   case UTP_RCVBUF:
   case UTP_TARGET_DELAY:
-    return Val_int(val);
+    res = Val_int(val);
+    break;
   default:
-    caml_invalid_argument("utp_context_get_option");
+    caml_failwith("utp_context_get_option");
   }
+
+  return res;
 }
 
 CAMLprim value caml_utp_context_set_option(value ctx, value opt, value val)
 {
   int utp_opt;
+  int res;
 
   switch (Int_val(opt)) {
   case 0:
@@ -548,7 +558,11 @@ CAMLprim value caml_utp_context_set_option(value ctx, value opt, value val)
     caml_invalid_argument("caml_utp_context_set_option");
   }
 
-  utp_context_set_option((utp_context *)ctx, utp_opt, Int_val(val));
+  res = utp_context_set_option((utp_context *)ctx, utp_opt, Int_val(val));
+
+  if (res < 0) {
+    caml_failwith("utp_context_set_option");
+  }
 
   return Val_unit;
 }
