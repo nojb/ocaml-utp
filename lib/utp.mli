@@ -45,6 +45,14 @@ type context_stats =
     nraw_send_huge : int;
   }
 
+type _ option =
+  | LOG_NORMAL : bool option
+  | LOG_MTU : bool option
+  | LOG_DEBUG : bool option
+  | SNDBUF : int option
+  | RCVBUF : int option
+  | TARGET_DELAY : int option
+
 val context : unit -> context
 val socket : context -> socket
 val connect : socket -> Unix.sockaddr -> unit Lwt.t
@@ -55,3 +63,5 @@ val write : socket -> bytes -> int -> int -> int Lwt.t
 val close : socket -> unit Lwt.t
 val get_stats : socket -> socket_stats
 val get_context_stats : context -> context_stats
+val getsockopt : socket -> 'a option -> 'a
+val setsockopt : socket -> 'a option -> 'a -> unit

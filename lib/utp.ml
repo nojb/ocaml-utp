@@ -64,6 +64,14 @@ type socket_info =
     writers : unit Lwt.u Lwt_sequence.t;
   }
 
+type _ option =
+  | LOG_NORMAL : bool option
+  | LOG_MTU : bool option
+  | LOG_DEBUG : bool option
+  | SNDBUF : int option
+  | RCVBUF : int option
+  | TARGET_DELAY : int option
+
 external utp_init : int -> utp_context = "caml_utp_init"
 external utp_destroy : utp_context -> unit = "caml_utp_destroy"
 external utp_create_socket : utp_context -> socket = "caml_utp_create_socket"
@@ -82,6 +90,8 @@ external utp_get_context : socket -> utp_context = "caml_utp_get_context"
 external utp_context_get_userdata : utp_context -> context = "caml_utp_context_get_userdata"
 external utp_context_set_userdata : utp_context -> context -> unit = "caml_utp_context_set_userdata"
 external utp_get_context_stats : utp_context -> context_stats = "caml_utp_get_context_stats"
+external utp_getsockopt : socket -> 'a option -> 'a = "caml_utp_getsockopt"
+external utp_setsockopt : socket -> 'a option -> 'a -> unit = "caml_utp_setsockopt"
 
 open Lwt.Infix
 
@@ -281,6 +291,12 @@ let close sock =
 
 let get_context_stats ctx =
   utp_get_context_stats ctx.utp_ctx
+
+let getsockopt sock opt =
+  utp_getsockopt sock opt
+
+let setsockopt sock opt v =
+  utp_setsockopt sock opt v
 
 let () =
   Callback.register "caml_utp_on_read" on_read;
