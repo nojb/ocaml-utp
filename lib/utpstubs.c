@@ -35,6 +35,11 @@ static uint64 callback_on_read(utp_callback_arguments* a)
 {
   /* fprintf(stderr, "callback_on_read\n"); */
   value ba = caml_ba_alloc_dims(CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *)a->buf, a->len);
+
+  if (!ba) {
+    caml_raise_out_of_memory();
+  }
+
   caml_callback2 (*caml_named_value("caml_utp_on_read"), (value)a->socket, ba);
   return 0;
 }
@@ -94,7 +99,16 @@ static uint64 callback_on_sendto(utp_callback_arguments *a)
   sock_addr_len = sizeof (struct sockaddr_in);
   memcpy(&sock_addr.s_inet, (struct sockaddr_in *)a->address, sock_addr_len);
   addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
+
+  if (!addr) {
+    caml_raise_out_of_memory();
+  }
+
   buf = caml_ba_alloc_dims(CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *)a->buf, a->len);
+
+  if (!buf) {
+    caml_raise_out_of_memory();
+  }
 
   caml_callback3(*caml_named_value("caml_utp_on_sendto"), (value)a->context, addr, buf);
 
@@ -124,6 +138,10 @@ static uint64 callback_on_accept(utp_callback_arguments *a)
   sock_addr_len = sizeof (struct sockaddr_in);
   memcpy(&sock_addr.s_inet, (struct sockaddr_in *)a->address, sock_addr_len);
   addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
+
+  if (!addr) {
+    caml_raise_out_of_memory();
+  }
 
   caml_callback2(*caml_named_value("caml_utp_on_accept"), (value)a->socket, addr);
 
@@ -161,6 +179,11 @@ CAMLprim value caml_utp_set_userdata(value sock, value info)
     caml_modify_generational_global_root(utp_info, info);
   } else {
     utp_info = (value *)malloc(sizeof (value));
+
+    if (!utp_info) {
+      caml_raise_out_of_memory();
+    }
+
     *utp_info = info;
     caml_register_generational_global_root(utp_info);
     utp_set_userdata(utp_sock, utp_info);
@@ -288,7 +311,7 @@ CAMLprim value caml_utp_get_stats(value sock)
   stats = caml_alloc(8, 0);
 
   if (!stats) {
-    caml_failwith("caml_utp_get_stats: caml_alloc");
+    caml_raise_out_of_memory();
   }
 
   Store_field(stats, 0, Val_int(utp_stats->nbytes_recv));
@@ -335,6 +358,11 @@ CAMLprim value caml_utp_context_set_userdata(value utp_ctx, value ctx)
     caml_modify_generational_global_root(old_ctx, ctx);
   } else {
     old_ctx = (value *)malloc(sizeof (value));
+
+    if (!old_ctx) {
+      caml_raise_out_of_memory();
+    }
+
     *old_ctx = ctx;
     caml_register_generational_global_root(old_ctx);
     utp_context_set_userdata((utp_context *)utp_ctx, old_ctx);
@@ -357,7 +385,7 @@ CAMLprim value caml_utp_get_context_stats(value ctx)
   stats = caml_alloc(10, 0);
 
   if (!stats) {
-    caml_failwith("caml_utp_get_context_stats: caml_alloc");
+    caml_raise_out_of_memory();
   }
 
   Store_field(stats, 0, Val_int(utp_stats->_nraw_recv[0]));
