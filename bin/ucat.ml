@@ -130,6 +130,9 @@ let main () =
 
   let ctx = Utp.context () in
 
+  (* Utp.set_context_opt ctx Utp.LOG_DEBUG true; *)
+  Utp.set_context_opt ctx Utp.LOG_NORMAL true;
+
   match !o_listen with
   | false ->
       let%lwt addr = lookup !o_remote_address !o_remote_port in
@@ -148,6 +151,7 @@ let main () =
       in
       loop ()
   | true ->
+      let quitting, quit = Lwt.wait () in
       let rec echo id sock =
         match%lwt Utp.read sock buf 0 (Bytes.length buf) with
         | 0 ->
@@ -158,6 +162,14 @@ let main () =
             Lwt_io.printlf ">>>" >>
             echo id sock
       in
+      Lwt.async (fun () ->
+          match%lwt Lwt_io.read Lwt_io.stdin with
+          | "" ->
+              Lwt.wakeup_later quit ();
+              Lwt.return_unit
+          | _ ->
+              Lwt.return_unit
+        );
       let%lwt addr = lookup !o_local_address !o_local_port in
       Utp.bind ctx addr;
       let id = ref (-1) in
@@ -165,7 +177,7 @@ let main () =
         incr id;
         let%lwt sock, addr = Utp.accept ctx in
         debug "Connection accepted from %s" (string_of_sockaddr addr);
-        Lwt.async (fun () -> echo !id sock);
+        Lwt.async (fun () -> Lwt.async (fun () -> quitting >> Utp.close sock); echo !id sock);
         loop ()
       in
       loop ()

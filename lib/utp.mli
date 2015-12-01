@@ -63,5 +63,7 @@ val write : socket -> bytes -> int -> int -> int Lwt.t
 val close : socket -> unit Lwt.t
 val get_stats : socket -> socket_stats
 val get_context_stats : context -> context_stats
-val getsockopt : socket -> 'a option -> 'a
-val setsockopt : socket -> 'a option -> 'a -> unit
+val get_opt : socket -> 'a option -> 'a
+val set_opt : socket -> 'a option -> 'a -> unit
+val get_context_opt : context -> 'a option -> 'a
+val set_context_opt : context -> 'a option -> 'a -> unit

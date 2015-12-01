@@ -477,3 +477,79 @@ CAMLprim value caml_utp_setsockopt(value sock, value opt, value val)
 
   return Val_unit;
 }
+
+CAMLprim value caml_utp_context_get_option(value ctx, value opt)
+{
+  int utp_opt;
+  int val;
+
+  switch (Int_val(opt)) {
+  case 0:
+    utp_opt = UTP_LOG_NORMAL;
+    break;
+  case 1:
+    utp_opt = UTP_LOG_MTU;
+    break;
+  case 2:
+    utp_opt = UTP_LOG_DEBUG;
+    break;
+  case 3:
+    utp_opt = UTP_SNDBUF;
+    break;
+  case 4:
+    utp_opt = UTP_RCVBUF;
+    break;
+  case 5:
+    utp_opt = UTP_TARGET_DELAY;
+    break;
+  default:
+    caml_invalid_argument("caml_utp_context_get_option");
+  }
+
+  val = utp_context_get_option((utp_context *)ctx, utp_opt);
+
+  switch (utp_opt) {
+  case UTP_LOG_NORMAL:
+  case UTP_LOG_MTU:
+  case UTP_LOG_DEBUG:
+    return Val_bool(val);
+  case UTP_SNDBUF:
+  case UTP_RCVBUF:
+  case UTP_TARGET_DELAY:
+    return Val_int(val);
+  default:
+    caml_invalid_argument("utp_context_get_option");
+  }
+}
+
+CAMLprim value caml_utp_context_set_option(value ctx, value opt, value val)
+{
+  int utp_opt;
+
+  switch (Int_val(opt)) {
+  case 0:
+    utp_opt = UTP_LOG_NORMAL;
+    break;
+  case 1:
+    utp_opt = UTP_LOG_MTU;
+    break;
+  case 2:
+    utp_opt = UTP_LOG_DEBUG;
+    break;
+  case 3:
+    utp_opt = UTP_SNDBUF;
+    break;
+  case 4:
+    utp_opt = UTP_RCVBUF;
+    break;
+  case 5:
+    utp_opt = UTP_TARGET_DELAY;
+    break;
+  default:
+    caml_invalid_argument("caml_utp_context_set_option");
+  }
+
+  utp_context_set_option((utp_context *)ctx, utp_opt, Int_val(val));
+
+  return Val_unit;
+}

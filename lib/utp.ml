@@ -92,6 +92,8 @@ external utp_context_set_userdata : utp_context -> context -> unit = "caml_utp_c
 external utp_get_context_stats : utp_context -> context_stats = "caml_utp_get_context_stats"
 external utp_getsockopt : socket -> 'a option -> 'a = "caml_utp_getsockopt"
 external utp_setsockopt : socket -> 'a option -> 'a -> unit = "caml_utp_setsockopt"
+external utp_context_get_option : utp_context -> 'a option -> 'a = "caml_utp_context_get_option"
+external utp_context_set_option : utp_context -> 'a option -> 'a -> unit = "caml_utp_context_set_option"
 
 open Lwt.Infix
 
@@ -226,7 +228,8 @@ let on_sendto utp_ctx addr buf =
   Lwt.ignore_result t
 
 let on_log _sock str =
-  Printf.eprintf "[UTP] %s" str
+  prerr_string "[utp] ";
+  prerr_endline str
 
 let cancel_io info =
   Lwt_sequence.iter_node_r (fun node ->
@@ -292,11 +295,17 @@ let close sock =
 let get_context_stats ctx =
   utp_get_context_stats ctx.utp_ctx
 
-let getsockopt sock opt =
+let get_opt sock opt =
   utp_getsockopt sock opt
 
-let setsockopt sock opt v =
+let set_opt sock opt v =
   utp_setsockopt sock opt v
+
+let get_context_opt ctx opt =
+  utp_context_get_option ctx.utp_ctx opt
+
+let set_context_opt ctx opt v =
+  utp_context_set_option ctx.utp_ctx opt v
 
 let () =
   Callback.register "caml_utp_on_read" on_read;
