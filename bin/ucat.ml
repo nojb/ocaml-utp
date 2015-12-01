@@ -133,8 +133,11 @@ let main () =
 
   let ctx = Utp.context () in
 
-  (* Utp.set_context_opt ctx Utp.LOG_DEBUG true; *)
-  Utp.set_context_opt ctx Utp.LOG_NORMAL true;
+  if !o_debug >= 2 then begin
+    Utp.set_context_opt ctx Utp.LOG_NORMAL true;
+    Utp.set_context_opt ctx Utp.LOG_DEBUG true;
+    Utp.set_context_opt ctx Utp.LOG_MTU true
+  end;
 
   match !o_listen with
   | false ->

@@ -228,7 +228,7 @@ let on_sendto utp_ctx addr buf =
   Lwt.ignore_result t
 
 let on_log _sock str =
-  prerr_string "[utp] ";
+  prerr_string "log: ";
   prerr_endline str
 
 let cancel_io info =
