@@ -161,11 +161,11 @@ let main () =
       let rec echo id sock =
         match%lwt Utp.read sock buf 0 (Bytes.length buf) with
         | 0 ->
-            Lwt_io.eprintlf ">>>%d EOF" id
+            debug "Received EOF #%d" id;
+            Lwt.return_unit
         | len ->
-            Lwt_io.printlf ">>>%d" id >>
+            debug "Received %d bytes from #%d" len id;
             Lwt_io.write_from_exactly Lwt_io.stdout buf 0 len >>
-            Lwt_io.printlf ">>>" >>
             echo id sock
       in
       Lwt.async (fun () ->
