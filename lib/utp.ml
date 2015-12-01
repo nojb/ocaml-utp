@@ -271,7 +271,7 @@ let on_state_change sock st =
   | STATE_DESTROYING ->
       Lwt.wakeup info.closed ()
 
-let get_socket_stats sock =
+let get_stats sock =
   utp_get_stats sock
 
 let close sock =
