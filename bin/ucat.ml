@@ -29,20 +29,14 @@ let o_numeric = ref false
 let o_remote_port = ref 0
 let o_remote_address = ref ""
 
-let red s =
-  Printf.sprintf "\x1B[31m%s\x1B[0m" s
-
-let yellow s =
-  Printf.sprintf "\x1B[93m%s\x1B[0m" s
+let fatal fmt =
+  Printf.printf ("fatal: " ^^ fmt ^^ "\n%!")
 
 let debug fmt =
   if !o_debug > 0 then
-    Printf.eprintf ("%s " ^^ fmt ^^ "\n%!") (yellow "DEBUG:")
+    Printf.eprintf ("debug: " ^^ fmt ^^ "\n%!")
   else
     Printf.ifprintf stderr fmt
-
-let fatal fmt =
-  Printf.eprintf ("%s " ^^ fmt) (red "FATAL:")
 
 let spec =
   let open Arg in
@@ -115,6 +109,15 @@ let print_stats stats =
   debug "    Retransmits:         %d" stats.Utp.rexmit;
   debug "    Fast Retransmits:    %d" stats.Utp.fastrexmit;
   debug "    Best guess at MTU:   %d" stats.Utp.mtu_guess
+
+let print_context_stats stats =
+  debug "           Bucket size:    <23    <373    <723    <1400    >1400\n";
+  debug "Number of packets sent:  %5d   %5d   %5d    %5d    %5d\n"
+    stats.Utp.nraw_send_empty stats.Utp.nraw_send_small stats.Utp.nraw_send_mid
+    stats.Utp.nraw_send_big stats.Utp.nraw_send_huge;
+  debug "Number of packets recv:  %5d   %5d   %5d    %5d    %5d\n"
+    stats.Utp.nraw_recv_empty stats.Utp.nraw_recv_small stats.Utp.nraw_recv_mid
+    stats.Utp.nraw_recv_big stats.Utp.nraw_recv_huge
 
 let main () =
   Arg.parse spec anon_fun usage_msg;
