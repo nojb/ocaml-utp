@@ -237,7 +237,7 @@ CAMLprim value caml_utp_process_udp(value ctx, value buf, value len, value sa)
   get_sockaddr(sa, &addr, &addr_len);
   handled = utp_process_udp((utp_context *)ctx, Caml_ba_data_val(buf), Int_val(len), &addr.s_gen, addr_len);
 
-  return Val_int(handled);
+  return Val_bool(handled);
 }
 
 CAMLprim value caml_utp_create_socket(value ctx)

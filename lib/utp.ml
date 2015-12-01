@@ -81,7 +81,7 @@ external utp_write : socket -> bytes -> int -> int -> int = "caml_utp_write"
 external utp_read_drained : socket -> unit = "caml_utp_read_drained"
 external utp_issue_deferred_acks : utp_context -> unit = "caml_utp_issue_deferred_acks"
 external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
-external utp_process_udp : utp_context -> Lwt_bytes.t -> int -> Unix.sockaddr -> int = "caml_utp_process_udp"
+external utp_process_udp : utp_context -> Lwt_bytes.t -> int -> Unix.sockaddr -> bool = "caml_utp_process_udp"
 external utp_connect : socket -> Unix.sockaddr -> unit = "caml_utp_connect"
 external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
 external utp_close : socket -> unit = "caml_utp_close"
@@ -107,7 +107,7 @@ let network_loop ctx =
   let socket_data = Lwt_bytes.create 4096 in
   let rec loop () =
     Lwt_bytes.recvfrom ctx.fd socket_data 0 4096 [] >>= fun (n, sa) ->
-    let _ : int = utp_process_udp ctx.utp_ctx socket_data n sa in
+    let _ : bool = utp_process_udp ctx.utp_ctx socket_data n sa in
     if not (Lwt_unix.readable ctx.fd) then utp_issue_deferred_acks ctx.utp_ctx;
     loop ()
   in
