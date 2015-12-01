@@ -94,6 +94,7 @@ external utp_getsockopt : socket -> 'a option -> 'a = "caml_utp_getsockopt"
 external utp_setsockopt : socket -> 'a option -> 'a -> unit = "caml_utp_setsockopt"
 external utp_context_get_option : utp_context -> 'a option -> 'a = "caml_utp_context_get_option"
 external utp_context_set_option : utp_context -> 'a option -> 'a -> unit = "caml_utp_context_set_option"
+external utp_getpeername : socket -> Unix.inet_addr = "caml_utp_getpeername"
 
 open Lwt.Infix
 

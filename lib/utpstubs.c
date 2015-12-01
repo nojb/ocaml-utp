@@ -546,3 +546,25 @@ CAMLprim value caml_utp_context_set_option(value ctx, value opt, value val)
 
   return Val_unit;
 }
+
+CAMLprim value caml_utp_getpeername(value sock)
+{
+  int res;
+  union sock_addr_union sock_addr;
+  socklen_param_type sock_addr_len;
+  value addr;
+
+  res = utp_getpeername((utp_socket *)sock, &sock_addr.s_gen, &sock_addr_len);
+
+  if (res < 0) {
+    caml_failwith("utp_getpeername");
+  }
+
+  addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
+
+  if (!addr) {
+    caml_failwith("caml_utp_getpeername");
+  }
+
+  return addr;
+}
