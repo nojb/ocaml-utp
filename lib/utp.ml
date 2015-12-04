@@ -52,16 +52,49 @@ type context =
     accepting : (socket * Unix.sockaddr) Lwt.u Lwt_sequence.t;
   }
 
+module Q : sig
+  type ('a, 'b) t
+  val create : unit -> ('a, 'b) t
+  val push : ('a, 'b) t -> 'a -> 'b Lwt.t
+  val push_top : ('a, 'b) t -> 'a -> 'b Lwt.u -> unit
+  val pop : ('a, 'b) t -> 'a * 'b Lwt.u
+  val is_empty : ('a, 'b) t -> bool
+  val length : ('a, 'b) t -> int
+  val iter : ('b Lwt.u -> unit) -> ('a, 'b) t -> unit
+  val clear : ('a, 'b) t -> unit
+end = struct
+  type ('a, 'b) t = 'a Lwt_sequence.t * 'b Lwt.u Lwt_sequence.t
+  let create () =
+    (Lwt_sequence.create (), Lwt_sequence.create ())
+  let push (seq1, seq2) x =
+    let n = Lwt_sequence.add_l x seq1 in
+    let t = Lwt.add_task_l seq2 in
+    Lwt.on_cancel t (fun () -> Lwt_sequence.remove n);
+    t
+  let push_top (seq1, seq2) x u =
+    let _ = Lwt_sequence.add_r x seq1 in
+    let _ = Lwt_sequence.add_r u seq2 in
+    ()
+  let pop (seq1, seq2) =
+    let x = Lwt_sequence.take_r seq1 in
+    let u = Lwt_sequence.take_r seq2 in
+    x, u
+  let is_empty (seq1, _) = Lwt_sequence.is_empty seq1
+  let length (seq1, _) = Lwt_sequence.length seq1
+  let iter f (_, seq) = Lwt_sequence.iter_r f seq
+  let clear (seq1, seq2) =
+    Lwt_sequence.iter_node_r Lwt_sequence.remove seq1;
+    Lwt_sequence.iter_node_r Lwt_sequence.remove seq2
+end
+
 type socket_info =
   {
     connected : unit Lwt.u;
     connecting : unit Lwt.t;
     closing : unit Lwt.t;
     closed : unit Lwt.u;
-    mutable read_off : int;
-    mutable read_buf : Lwt_bytes.t;
-    readers : unit Lwt.u Lwt_sequence.t;
-    writers : unit Lwt.u Lwt_sequence.t;
+    on_read : Lwt_bytes.t -> unit;
+    writers : (bytes * int * int, int) Q.t;
   }
 
 type _ option =
@@ -131,7 +164,7 @@ let context () =
 let bind ctx addr =
   Lwt_unix.bind ctx.fd addr
 
-let create_info () =
+let create_info on_read =
   let connecting, connected = Lwt.wait () in
   let closing, closed = Lwt.wait () in
   {
@@ -139,15 +172,13 @@ let create_info () =
     connecting;
     closing;
     closed;
-    read_off = 0;
-    read_buf = Lwt_bytes.create 0;
-    readers = Lwt_sequence.create ();
-    writers = Lwt_sequence.create ();
+    on_read;
+    writers = Q.create ();
   }
 
-let socket ctx =
+let socket ctx on_read =
   let sock = utp_create_socket ctx.utp_ctx in
-  let info = create_info () in
+  let info = create_info on_read in
   utp_set_userdata sock info;
   sock
 
@@ -156,65 +187,45 @@ let connect sock addr =
   utp_connect sock addr;
   info.connecting
 
-let accept ctx =
-  Lwt.add_task_l ctx.accepting
-
-let read sock wbuf woff wlen =
-  let info = utp_get_userdata sock in
-  let rec try_read () =
-    let len = Lwt_bytes.length info.read_buf - info.read_off in
-    if len > 0 then begin
-      let n = min len wlen in
-      Lwt_bytes.blit_to_bytes info.read_buf info.read_off wbuf woff n;
-      info.read_off <- info.read_off + n;
-      if n < len then
-        if Lwt_sequence.length info.readers > 0 then
-          Lwt.wakeup_later (Lwt_sequence.take_r info.readers) ()
-      else
-        utp_read_drained sock;
-      Lwt.return n
-    end else
-      Lwt.try_bind
-        (fun () -> Lwt.add_task_r info.readers) try_read
-        (function
-          | End_of_file -> Lwt.return 0
-          | exn -> Lwt.fail exn
-        )
-  in
-  if Lwt_sequence.is_empty info.readers then
-    try_read ()
-  else
-    Lwt.add_task_l info.readers >>= try_read
+let accept ctx on_read =
+  Lwt.add_task_l ctx.accepting >>= fun (sock, sa) ->
+  let info = create_info on_read in
+  utp_set_userdata sock info;
+  Lwt.return (sock, sa)
 
 let on_read sock buf =
   let info = utp_get_userdata sock in
-  assert (Lwt_bytes.length info.read_buf = info.read_off);
-  info.read_off <- 0;
-  info.read_buf <- buf;
-  if Lwt_sequence.length info.readers > 0 then
-    Lwt.wakeup_later (Lwt_sequence.take_r info.readers) ()
+  info.on_read buf;
+  utp_read_drained sock
 
 let on_writeable sock =
   let info = utp_get_userdata sock in
-  if Lwt_sequence.length info.writers > 0 then
-    Lwt.wakeup_later (Lwt_sequence.take_r info.writers) ()
+  Printf.eprintf "on_writable\n%!";
+  let rec loop () =
+    if Q.length info.writers > 0 then begin
+      let (wbuf, woff, wlen), u = Q.pop info.writers in
+      let n = utp_write sock wbuf woff wlen in
+      if n = 0 then
+        Q.push_top info.writers (wbuf, woff, wlen) u
+      else begin
+        Lwt.wakeup u n;
+        loop ()
+      end
+    end
+  in
+  loop ()
 
 let write sock buf off len =
   let info = utp_get_userdata sock in
-  let rec try_write () =
+  Printf.eprintf "write len=%d\n%!" len;
+  if Q.is_empty info.writers then
     let n = utp_write sock buf off len in
     if n = 0 then
-      Lwt.add_task_r info.writers >>= try_write
-    else begin
-      if Lwt_sequence.length info.writers > 0 then
-        Lwt.wakeup_later (Lwt_sequence.take_r info.writers) ();
-      Lwt.return n
-    end
-  in
-  if Lwt_sequence.is_empty info.writers then
-    try_write ()
+      (Printf.eprintf "socket no longer writable\n%!"; Q.push info.writers (buf, off, len))
+    else
+      (Printf.eprintf "written %d bytes\n%!" n; Lwt.return n)
   else
-    Lwt.add_task_l info.writers >>= try_write
+    Q.push info.writers (buf, off, len)
 
 type error =
   | ECONNREFUSED
@@ -223,6 +234,8 @@ type error =
 
 let on_sendto utp_ctx addr buf =
   let ctx = utp_context_get_userdata utp_ctx in
+  (* Lwt_unix.check_descriptor ctx.fd; *)
+  (* Unix.sendto (Lwt_unix.unix_file_descr ctx.fd) buf 0 (Lwt_bytes.length buf) [] addr *)
   let t =
     Lwt_bytes.sendto ctx.fd buf 0 (Lwt_bytes.length buf) [] addr
   in
@@ -233,37 +246,27 @@ let on_log _sock str =
   prerr_endline str
 
 let cancel_io info =
-  Lwt_sequence.iter_node_r (fun node ->
-      Lwt_sequence.remove node;
-      let u = Lwt_sequence.get node in
-      Lwt.wakeup_later_exn u End_of_file
-    ) info.readers;
-  Lwt_sequence.iter_node_r (fun node ->
-      Lwt_sequence.remove node;
-      let u = Lwt_sequence.get node in
-      Lwt.wakeup_later_exn u End_of_file
-    ) info.writers;
+  Q.iter (fun u -> Lwt.wakeup_exn u End_of_file) info.writers;
+  Q.clear info.writers;
   Lwt.wakeup_exn info.connected End_of_file
 
 let on_error sock err =
   let info = utp_get_userdata sock in
-  cancel_io info;
-  match err with
-  | ECONNREFUSED
-  | ETIMEDOUT ->
-      Lwt.wakeup_exn info.connected (Failure "connection failed")
-  | ECONNRESET ->
-      () (* CHECK *)
+  cancel_io info
+  (* info.got_error <- true *)
+  (* match err with *)
+  (* | ECONNREFUSED *)
+  (* | ETIMEDOUT -> *)
+  (*     Lwt.wakeup_exn info.connected (Failure "connection failed") *)
+  (* | ECONNRESET -> *)
+  (*     () (\* CHECK *\) *)
 
 let on_accept sock addr =
   let utp_ctx = utp_get_context sock in
   let ctx = utp_context_get_userdata utp_ctx in
   match Lwt_sequence.take_opt_r ctx.accepting with
   | None -> ()
-  | Some u ->
-      let info = create_info () in
-      utp_set_userdata sock info;
-      Lwt.wakeup u (sock, addr)
+  | Some u -> Lwt.wakeup u (sock, addr)
 
 type state =
   | STATE_CONNECT
@@ -275,12 +278,11 @@ let on_state_change sock st =
   let info = utp_get_userdata sock in
   match st with
   | STATE_CONNECT ->
-      Lwt.wakeup info.connected ();
-      on_writeable sock
+      Lwt.wakeup info.connected ()
+      (* on_writeable sock *)
   | STATE_WRITABLE ->
       on_writeable sock
   | STATE_EOF ->
-      utp_close sock;
       cancel_io info
   | STATE_DESTROYING ->
       Lwt.wakeup info.closed ()
