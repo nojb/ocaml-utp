@@ -158,14 +158,6 @@ let main () =
       in
       loop ()
   | true ->
-      Lwt.async (fun () ->
-          match%lwt Lwt_io.read Lwt_io.stdin with
-          | "" ->
-              Lwt.wakeup_later quit ();
-              Lwt.return_unit
-          | _ ->
-              Lwt.return_unit
-        );
       let%lwt addr = lookup !o_local_address !o_local_port in
       Utp.bind ctx addr;
       let rec loop id =
