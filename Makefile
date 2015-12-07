@@ -23,7 +23,7 @@ $(LIB_DIR)utp.cmo: $(LIB_DIR)utp.mli $(LIB_DIR)utp.ml
 $(LIB_DIR)utp.cmx: $(LIB_DIR)utp.mli $(LIB_DIR)utp.ml
 	$(OCAMLFIND) ocamlopt -package lwt.unix -o $@ -c -I $(LIB_DIR) $^
 
-$(LIB_DIR)libutpstubs.a: $(LIB_DIR)utpstubs.o $(LIB_DIR)socketaddr.o $(LIB_DIR)unixsupport.o
+$(LIB_DIR)libutpstubs.a: $(LIB_DIR)utpstubs.o
 	ar rvs $@ $^
 
 %.o: %.c

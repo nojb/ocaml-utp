@@ -26,10 +26,9 @@
 #include <caml/callback.h>
 #include <caml/bigarray.h>
 #include <caml/fail.h>
+#include <caml/socketaddr.h>
 
 #include "utp.h"
-
-#include "socketaddr.h"
 
 static uint64 callback_on_read(utp_callback_arguments* a)
 {
