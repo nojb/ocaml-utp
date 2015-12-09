@@ -54,10 +54,11 @@ type _ option =
   | TARGET_DELAY : int option
 
 val context : unit -> context
-val socket : context -> (Lwt_bytes.t -> unit) -> socket
+val socket : context -> socket
 val connect : socket -> Unix.sockaddr -> unit Lwt.t
 val bind : context -> Unix.sockaddr -> unit
-val accept : context -> (Lwt_bytes.t -> unit) -> (socket * Unix.sockaddr) Lwt.t
+val accept : context -> (socket * Unix.sockaddr) Lwt.t
+val read : socket -> bytes -> int -> int -> int Lwt.t
 val write : socket -> bytes -> int -> int -> int Lwt.t
 val close : socket -> unit Lwt.t
 val get_stats : socket -> socket_stats

@@ -143,8 +143,7 @@ let main () =
   | false ->
       let%lwt addr = lookup !o_remote_address !o_remote_port in
       debug "Connecting to %s..." (string_of_sockaddr addr);
-      let on_read _ = () in
-      let sock = Utp.socket ctx on_read in
+      let sock = Utp.socket ctx in
       let%lwt () = Utp.connect sock addr in
       debug "Connected to %s" (string_of_sockaddr addr);
       let rec loop () =
@@ -161,13 +160,19 @@ let main () =
       let%lwt addr = lookup !o_local_address !o_local_port in
       Utp.bind ctx addr;
       let rec loop id =
-        let on_read buf =
-          debug "Received %d bytes from #%d" (Lwt_bytes.length buf) id;
-          print_string (Lwt_bytes.to_string buf);
-          flush stdout
-        in
-        let%lwt sock, addr = Utp.accept ctx on_read in
+        let%lwt sock, addr = Utp.accept ctx in
         debug "Connection accepted from %s" (string_of_sockaddr addr);
+        let buf = Bytes.create 4096 in
+        let rec loop1 () =
+          match%lwt Utp.read sock buf 0 4096 with
+          | 0 ->
+              Lwt.return_unit
+          | n ->
+              debug "Received %d bytes from #%d" n id;
+              let%lwt () = Lwt_io.write_from_exactly Lwt_io.stdout buf 0 n in
+              loop1 ()
+        in
+        Lwt.async loop1;
         loop (id+1)
       in
       loop 0

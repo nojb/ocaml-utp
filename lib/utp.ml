@@ -52,13 +52,88 @@ type context =
     accepting : (socket * Unix.sockaddr) Lwt.u Lwt_sequence.t;
   }
 
+module B : sig
+  type t
+
+  val create : int -> t
+  val push : t -> Lwt_bytes.t -> unit
+  val pop : t -> bytes -> int -> int -> int
+  val length : t -> int
+end = struct
+  type chunk =
+    {
+      data : bytes;
+      mutable max : int;
+    }
+
+  type t = int * chunk Lwt_sequence.t
+
+  let create sz =
+    if sz <= 0 then invalid_arg "B.create";
+    let seq = Lwt_sequence.create () in
+    ignore (Lwt_sequence.add_r {data = Bytes.create sz; max = 0} seq : _ Lwt_sequence.node);
+    (sz, seq)
+
+  let push (sz, seq) data =
+    let rec loop chk off =
+      if off < Lwt_bytes.length data then begin
+        let chk =
+          if chk.max >= Bytes.length chk.data then begin
+            ignore (Lwt_sequence.add_r chk seq : _ Lwt_sequence.node);
+            Printf.eprintf "debug: adding bucket (curr = %d)\n%!" (Lwt_sequence.length seq);
+            {data = Bytes.create sz; max = 0};
+          end else
+            chk
+        in
+        let n = min (Bytes.length chk.data - chk.max) (Lwt_bytes.length data - off) in
+        Lwt_bytes.blit_to_bytes data off chk.data chk.max n;
+        chk.max <- chk.max + n;
+        loop chk (off + n)
+      end else
+        ignore (Lwt_sequence.add_r chk seq : _ Lwt_sequence.node)
+    in
+    loop (Lwt_sequence.take_r seq) 0
+
+  let pop (sz, seq) buf off len =
+    let len0 = len in
+    let rec loop chk off len =
+      if len > 0 then
+        if chk.max > 0 then begin
+          let n = min len chk.max in
+          Bytes.blit chk.data 0 buf off n;
+          Bytes.blit chk.data n chk.data 0 (chk.max - n);
+          chk.max <- chk.max - n;
+          loop chk (off + n) (len - n)
+        end else if Lwt_sequence.is_empty seq then begin
+          ignore (Lwt_sequence.add_r chk seq : _ Lwt_sequence.node);
+          len0 - len
+        end else begin
+          Printf.eprintf "debug: discarding bucket (curr=%d)\n%!" (Lwt_sequence.length seq);
+          loop (Lwt_sequence.take_l seq) off len
+        end
+      else begin
+        if chk.max > 0 || Lwt_sequence.is_empty seq then
+          ignore (Lwt_sequence.add_l chk seq : _ Lwt_sequence.node)
+        else
+          Printf.eprintf "debug: discarding bucket (curr=%d)\n%!" (Lwt_sequence.length seq);
+        len0
+      end
+    in
+    loop (Lwt_sequence.take_l seq) off len
+
+  let length (_, seq) =
+    Lwt_sequence.fold_l (fun chk acc -> chk.max + acc) seq 0
+end
+
 type socket_info =
   {
     connected : unit Lwt.u;
     connecting : unit Lwt.t;
     closing : unit Lwt.t;
     closed : unit Lwt.u;
-    on_read : Lwt_bytes.t -> unit;
+    readb : B.t;
+    readm : Lwt_mutex.t;
+    readc : unit Lwt_condition.t;
     writem : Lwt_mutex.t;
     writec : unit Lwt_condition.t;
   }
@@ -130,7 +205,7 @@ let context () =
 let bind ctx addr =
   Lwt_unix.bind ctx.fd addr
 
-let create_info on_read =
+let create_info () =
   let connecting, connected = Lwt.wait () in
   let closing, closed = Lwt.wait () in
   {
@@ -138,14 +213,16 @@ let create_info on_read =
     connecting;
     closing;
     closed;
-    on_read;
+    readb = B.create 4096;
+    readm = Lwt_mutex.create ();
+    readc = Lwt_condition.create ();
     writem = Lwt_mutex.create ();
     writec = Lwt_condition.create ();
   }
 
-let socket ctx on_read =
+let socket ctx =
   let sock = utp_create_socket ctx.utp_ctx in
-  let info = create_info on_read in
+  let info = create_info () in
   utp_set_userdata sock info;
   sock
 
@@ -154,16 +231,28 @@ let connect sock addr =
   utp_connect sock addr;
   info.connecting
 
-let accept ctx on_read =
+let accept ctx =
   Lwt.add_task_l ctx.accepting >>= fun (sock, sa) ->
-  let info = create_info on_read in
+  let info = create_info () in
   utp_set_userdata sock info;
   Lwt.return (sock, sa)
 
 let on_read sock buf =
   let info = utp_get_userdata sock in
-  info.on_read buf;
+  B.push info.readb buf;
+  Lwt_condition.signal info.readc ();
   utp_read_drained sock
+
+let read sock buf off len =
+  let info = utp_get_userdata sock in
+  let rec loop () =
+    let n = B.pop info.readb buf off len in
+    if n = 0 && len > 0 then
+      Lwt_condition.wait info.readc >>= loop
+    else
+      Lwt.return n
+  in
+  Lwt_mutex.with_lock info.readm loop
 
 let on_writeable sock =
   let info = utp_get_userdata sock in
@@ -175,7 +264,7 @@ let write sock buf off len =
   Printf.eprintf "write len=%d\n%!" len;
   let rec loop () =
     let n = utp_write sock buf off len in
-    if n = 0 then
+    if n = 0 && len > 0 then
       Lwt_condition.wait info.writec >>= loop
     else
       Lwt.return n
