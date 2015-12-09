@@ -16,7 +16,7 @@ When this is more stable I will add better usage docs.
 
 ## License
 
-LGPL 2.1
+MIT.
 
 ## Contact
 
