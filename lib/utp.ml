@@ -63,70 +63,56 @@ module B : sig
   val push : t -> Lwt_bytes.t -> unit
   val pop : t -> bytes -> int -> int -> int
   val length : t -> int
+  val shrink : t -> unit
 end = struct
-  type chunk =
+  type t =
     {
-      data : bytes;
+      mutable data : bytes;
       mutable max : int;
     }
 
-  type t = int * chunk Lwt_sequence.t
+  let create n =
+    let m = ref 2 in
+    while !m < n do m := 2 * !m done;
+    {
+      data = Bytes.create !m;
+      max = 0;
+    }
 
-  let create sz =
-    if sz <= 0 then invalid_arg "B.create";
-    let seq = Lwt_sequence.create () in
-    ignore (Lwt_sequence.add_r {data = Bytes.create sz; max = 0} seq : _ Lwt_sequence.node);
-    (sz, seq)
+  let resize b n =
+    if n + b.max > Bytes.length b.data then begin
+      let new_len = ref (2 * Bytes.length b.data) in
+      while !new_len < n + b.max do new_len := 2 * !new_len done;
+      Printf.eprintf "Resizing buffer to %d bytes\n%!" !new_len;
+      let new_data = Bytes.create !new_len in
+      Bytes.blit b.data 0 new_data 0 b.max;
+      b.data <- new_data
+    end
 
-  let push (sz, seq) data =
-    let rec loop chk off =
-      if off < Lwt_bytes.length data then begin
-        let chk =
-          if chk.max >= Bytes.length chk.data then begin
-            ignore (Lwt_sequence.add_r chk seq : _ Lwt_sequence.node);
-            Printf.eprintf "debug: adding bucket (curr = %d)\n%!" (Lwt_sequence.length seq);
-            {data = Bytes.create sz; max = 0};
-          end else
-            chk
-        in
-        let n = min (Bytes.length chk.data - chk.max) (Lwt_bytes.length data - off) in
-        Lwt_bytes.blit_to_bytes data off chk.data chk.max n;
-        chk.max <- chk.max + n;
-        loop chk (off + n)
-      end else
-        ignore (Lwt_sequence.add_r chk seq : _ Lwt_sequence.node)
-    in
-    loop (Lwt_sequence.take_r seq) 0
+  let push b buf =
+    resize b (Lwt_bytes.length buf);
+    Lwt_bytes.blit_to_bytes buf 0 b.data b.max (Lwt_bytes.length buf);
+    b.max <- b.max + Lwt_bytes.length buf
 
-  let pop (sz, seq) buf off len =
-    let len0 = len in
-    let rec loop chk off len =
-      if len > 0 then
-        if chk.max > 0 then begin
-          let n = min len chk.max in
-          Bytes.blit chk.data 0 buf off n;
-          Bytes.blit chk.data n chk.data 0 (chk.max - n);
-          chk.max <- chk.max - n;
-          loop chk (off + n) (len - n)
-        end else if Lwt_sequence.is_empty seq then begin
-          ignore (Lwt_sequence.add_r chk seq : _ Lwt_sequence.node);
-          len0 - len
-        end else begin
-          Printf.eprintf "debug: discarding bucket (curr=%d)\n%!" (Lwt_sequence.length seq);
-          loop (Lwt_sequence.take_l seq) off len
-        end
-      else begin
-        if chk.max > 0 || Lwt_sequence.is_empty seq then
-          ignore (Lwt_sequence.add_l chk seq : _ Lwt_sequence.node)
-        else
-          Printf.eprintf "debug: discarding bucket (curr=%d)\n%!" (Lwt_sequence.length seq);
-        len0
-      end
-    in
-    loop (Lwt_sequence.take_l seq) off len
+  let pop b buf off len =
+    let n = min len b.max in
+    Bytes.blit b.data 0 buf off n;
+    if n < b.max then Bytes.blit b.data n b.data 0 (b.max - n);
+    b.max <- b.max - n;
+    n
 
-  let length (_, seq) =
-    Lwt_sequence.fold_l (fun chk acc -> chk.max + acc) seq 0
+  let length b =
+    b.max
+
+  let shrink b =
+    let m = ref 2 in
+    while !m < b.max do m := 2 * !m done;
+    if 2 * !m < Bytes.length b.data then begin
+      Printf.eprintf "Shrinking buffer to %d bytes\n%!" !m;
+      let new_data = Bytes.create !m in
+      Bytes.blit b.data 0 new_data 0 b.max;
+      b.data <- new_data
+    end
 end
 
 type socket_info =
