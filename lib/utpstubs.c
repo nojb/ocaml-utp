@@ -31,6 +31,7 @@
 #include <caml/bigarray.h>
 #include <caml/fail.h>
 #include <caml/socketaddr.h>
+#include <caml/unixsupport.h>
 
 #include "utp.h"
 
@@ -590,4 +591,20 @@ CAMLprim value caml_utp_getpeername(value sock)
   }
 
   return addr;
+}
+
+CAMLprim value caml_sendto_bytes(value fd, value buf, value off, value len, value sa)
+{
+  CAMLparam5(fd, buf, off, len, sa);
+  union sock_addr_union sock_addr;
+  socklen_param_type addr_len;
+  int res;
+
+  get_sockaddr(sa, &sock_addr, &addr_len);
+  res = sendto(Int_val(fd), Caml_ba_data_val(buf) + Int_val(off), Int_val(len), 0, &sock_addr.s_gen, addr_len);
+
+  if (res < 0)
+    uerror("sendto", sa);
+
+  CAMLreturn(Val_unit);
 }

@@ -266,14 +266,12 @@ type error =
   | ECONNRESET
   | ETIMEDOUT
 
+external sendto_bytes: Unix.file_descr -> Lwt_bytes.t -> int -> int -> Unix.sockaddr -> unit = "caml_sendto_bytes" "noalloc"
+
 let on_sendto utp_ctx addr buf =
   let ctx = utp_context_get_userdata utp_ctx in
-  (* Lwt_unix.check_descriptor ctx.fd; *)
-  (* Unix.sendto (Lwt_unix.unix_file_descr ctx.fd) buf 0 (Lwt_bytes.length buf) [] addr *)
-  let t =
-    Lwt_bytes.sendto ctx.fd buf 0 (Lwt_bytes.length buf) [] addr
-  in
-  Lwt.ignore_result t
+  Lwt_unix.check_descriptor ctx.fd;
+  sendto_bytes (Lwt_unix.unix_file_descr ctx.fd) buf 0 (Lwt_bytes.length buf) addr
 
 let on_log _sock str =
   prerr_string "log: ";
