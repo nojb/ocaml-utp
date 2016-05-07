@@ -37,6 +37,7 @@
 
 typedef struct {
   utp_context *context;
+  int fd;
 
   value on_error;
   value on_sendto;
@@ -290,23 +291,51 @@ CAMLprim value caml_socket_set_callback(value sock, value cbnum, value fun)
 
 CAMLprim value caml_utp_init(value version)
 {
-  utp_context *utp_ctx;
+  utp_context *context;
   utp_context_userdata *u;
 
-  utp_ctx = utp_init(Int_val(version));
-  u = calloc(1, sizeof(utp_context_userdata));
+  context = utp_init (Int_val(version));
+  u = calloc (1, sizeof (utp_context_userdata));
 
-  utp_context_set_userdata (utp_ctx, u);
+  u->context = context;
+  u->fd = socket (PF_INET, SOCK_DGRAM, 0);
+  utp_context_set_userdata (context, u);
 
-  utp_set_callback(utp_ctx, UTP_ON_READ, callback_on_read);
-  utp_set_callback(utp_ctx, UTP_ON_STATE_CHANGE, callback_on_state_change);
-  utp_set_callback(utp_ctx, UTP_SENDTO, callback_on_sendto);
-  utp_set_callback(utp_ctx, UTP_LOG, callback_on_log);
-  utp_set_callback(utp_ctx, UTP_ON_ERROR, callback_on_error);
-  utp_set_callback(utp_ctx, UTP_ON_ACCEPT, callback_on_accept);
-  utp_set_callback(utp_ctx, UTP_ON_FIREWALL, callback_on_firewall);
+  utp_set_callback (context, UTP_ON_READ, callback_on_read);
+  utp_set_callback (context, UTP_ON_STATE_CHANGE, callback_on_state_change);
+  utp_set_callback (context, UTP_SENDTO, callback_on_sendto);
+  utp_set_callback (context, UTP_LOG, callback_on_log);
+  utp_set_callback (context, UTP_ON_ERROR, callback_on_error);
+  utp_set_callback (context, UTP_ON_ACCEPT, callback_on_accept);
+  utp_set_callback (context, UTP_ON_FIREWALL, callback_on_firewall);
 
-  return (value)utp_ctx;
+  return (value) context;
+}
+
+CAMLprim value caml_utp_file_descr (value ctx)
+{
+  CAMLparam1(ctx);
+  utp_context_userdata *u;
+
+  u = utp_context_get_userdata((utp_context *) ctx);
+
+  CAMLreturn(Val_int(u->fd));
+}
+
+CAMLprim value caml_utp_bind (value ctx, value sa)
+{
+  CAMLparam2(ctx, sa);
+  union sock_addr_union addr;
+  socklen_param_type addr_len;
+  utp_context_userdata *u;
+
+  u = utp_context_get_userdata ((utp_context *) ctx);
+
+  get_sockaddr(sa, &addr, &addr_len);
+
+  bind (u->fd, &addr.s_gen, addr_len);
+
+  CAMLreturn(Val_unit);
 }
 
 CAMLprim value caml_utp_destroy(value ctx)
