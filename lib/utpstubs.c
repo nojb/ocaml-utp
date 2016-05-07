@@ -38,7 +38,6 @@
 typedef struct {
   utp_context *context;
 
-  value on_read;
   value on_state_change;
   value on_error;
   value on_sendto;
@@ -50,11 +49,15 @@ typedef struct {
   utp_socket *socket;
 
   value on_read;
+  value on_connect;
+  value on_writable;
+  value on_eof;
+  value on_close;
 } utp_userdata;
 
 static uint64 callback_on_read (utp_callback_arguments* a)
 {
-  utp_context_userdata *u = utp_context_get_userdata (a->context);
+  utp_userdata *u;
 
   value ba = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
 
@@ -62,42 +65,44 @@ static uint64 callback_on_read (utp_callback_arguments* a)
     caml_raise_out_of_memory ();
   }
 
+  u = utp_get_userdata (a->socket);
+
   if (u->on_read) {
-    caml_callback2 (u->on_read, (value) a->socket, ba);
+    caml_callback (u->on_read, ba);
   }
 
-  /* utp_read_drained (a->socket); */
+  utp_read_drained (a->socket);
 
   return 0;
 }
 
 static uint64 callback_on_state_change (utp_callback_arguments *a)
 {
-  utp_context_userdata *u;
-  int state;
+  utp_userdata *u;
+  value cb;
+
+  u = utp_get_userdata (a->socket);
 
   switch (a->state) {
     case UTP_STATE_CONNECT:
-      state = 0;
+      cb = u->on_connect;
       break;
     case UTP_STATE_WRITABLE:
-      state = 1;
+      cb = u->on_writable;
       break;
     case UTP_STATE_EOF:
-      state = 2;
+      cb = u->on_eof;
       break;
-    case UTP_STATE_DESTROYING:
-      state = 3;
+    case UTP_STATE_DESTROYING: // TODO FIXME
+      cb = u->on_close;
       break;
     default:
       caml_invalid_argument("callback_on_state_change");
       break;
   }
 
-  u = utp_context_get_userdata (a->context);
-
-  if (u->on_state_change) {
-    caml_callback2(u->on_state_change, (value)a->socket, Val_int(state));
+  if (cb) {
+    caml_callback (cb, Val_unit);
   }
 
   return 0;
@@ -180,6 +185,7 @@ static uint64 callback_on_log (utp_callback_arguments *a)
 static uint64 callback_on_accept (utp_callback_arguments *a)
 {
   utp_context_userdata *u;
+  utp_userdata *su;
   union sock_addr_union sock_addr;
   socklen_param_type sock_addr_len;
   value addr;
@@ -191,6 +197,10 @@ static uint64 callback_on_accept (utp_callback_arguments *a)
   if (!addr) {
     caml_raise_out_of_memory();
   }
+
+  su = calloc (1, sizeof (utp_userdata));
+  su->socket = a->socket;
+  utp_set_userdata (a->socket, su);
 
   u = utp_context_get_userdata (a->context);
 
@@ -259,21 +269,18 @@ CAMLprim value caml_utp_set_callback(value ctx, value cb, value fun)
 
   switch (Int_val(cb)) {
     case 0:
-      cbaddr = &(u->on_read);
-      break;
-    case 1:
       cbaddr = &(u->on_state_change);
       break;
-    case 2:
+    case 1:
       cbaddr = &(u->on_error);
       break;
-    case 3:
+    case 2:
       cbaddr = &(u->on_sendto);
       break;
-    case 4:
+    case 3:
       cbaddr = &(u->on_log);
       break;
-    case 5:
+    case 4:
       cbaddr = &(u->on_accept);
       break;
   }
@@ -283,6 +290,41 @@ CAMLprim value caml_utp_set_callback(value ctx, value cb, value fun)
   } else {
     *cbaddr = fun;
     caml_register_generational_global_root(cbaddr);
+  }
+
+  CAMLreturn(Val_unit);
+}
+
+CAMLprim value caml_socket_set_callback(value sock, value cbnum, value fun)
+{
+  CAMLparam3(sock, cbnum, fun);
+
+  utp_userdata *u = utp_get_userdata((utp_socket *) sock);
+  value *cb;
+
+  switch (Int_val(cbnum)) {
+    case 0:
+      cb = &(u->on_read);
+      break;
+    case 1:
+      cb = &(u->on_connect);
+      break;
+    case 2:
+      cb = &(u->on_writable);
+      break;
+    case 3:
+      cb = &(u->on_eof);
+      break;
+    case 4:
+      cb = &(u->on_close);
+      break;
+  }
+
+  if (*cb) {
+    caml_modify_generational_global_root(cb, fun);
+  } else {
+    *cb = fun;
+    caml_register_generational_global_root(cb);
   }
 
   CAMLreturn(Val_unit);
@@ -344,12 +386,17 @@ CAMLprim value caml_utp_process_udp(value ctx, value buf, value len, value sa)
 CAMLprim value caml_utp_create_socket(value ctx)
 {
   utp_socket *utp_sock;
+  utp_userdata *u;
 
   utp_sock = utp_create_socket((utp_context *)ctx);
 
   if (!utp_sock) {
     caml_failwith("utp_create_socket");
   }
+
+  u = calloc (1, sizeof (utp_userdata));
+  u->socket = utp_sock;
+  utp_set_userdata (utp_sock, u);
 
   return (value)utp_sock;
 }

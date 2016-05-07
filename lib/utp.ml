@@ -35,12 +35,17 @@ type error =
   | ETIMEDOUT
 
 type _ context_callback =
-  | ON_READ : (socket -> Lwt_bytes.t -> unit) context_callback
-  | ON_STATE_CHANGE : (socket -> state -> unit) context_callback
   | ON_ERROR : (socket -> error -> unit) context_callback
   | ON_SENDTO : (context -> Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
   | ON_LOG : (socket -> string -> unit) context_callback
   | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) context_callback
+
+type _ callback =
+  | ON_READ : (Lwt_bytes.t -> unit) callback
+  | ON_CONNECT : (unit -> unit) callback
+  | ON_WRITABLE : (unit -> unit) callback
+  | ON_EOF : (unit -> unit) callback
+  | ON_CLOSE : (unit -> unit) callback
 
 type socket_stats =
   {
@@ -133,11 +138,6 @@ type socket_info =
     connecting : unit Lwt.t;
     closing : unit Lwt.t;
     closed : unit Lwt.u;
-    readb : B.t;
-    readm : Lwt_mutex.t;
-    readc : unit Lwt_condition.t;
-    writem : Lwt_mutex.t;
-    writec : unit Lwt_condition.t;
   }
 
 type _ option =
@@ -150,12 +150,12 @@ type _ option =
 
 external utp_init : int -> context = "caml_utp_init"
 external utp_set_callback : context -> 'a context_callback -> 'a -> unit = "caml_utp_set_callback"
+external set_socket_callback : socket -> 'a callback -> 'a -> unit = "caml_socket_set_callback"
 external utp_destroy : context -> unit = "caml_utp_destroy"
-external utp_create_socket : context -> socket = "caml_utp_create_socket"
+external socket : context -> socket = "caml_utp_create_socket"
 external utp_get_userdata : socket -> socket_info = "caml_utp_get_userdata"
 external utp_set_userdata : socket -> socket_info -> unit = "caml_utp_set_userdata"
-external utp_write : socket -> bytes -> int -> int -> int = "caml_utp_write"
-external utp_read_drained : socket -> unit = "caml_utp_read_drained"
+external write : socket -> bytes -> int -> int -> int = "caml_utp_write"
 external utp_issue_deferred_acks : context -> unit = "caml_utp_issue_deferred_acks"
 external utp_check_timeouts : context -> unit = "caml_utp_check_timeouts"
 external utp_process_udp : context -> Lwt_bytes.t -> int -> Unix.sockaddr -> bool = "caml_utp_process_udp"
@@ -196,65 +196,10 @@ let bind ctx addr =
   assert false
   (* Lwt_unix.bind ctx.fd addr *)
 
-let create_info () =
-  let connecting, connected = Lwt.wait () in
-  let closing, closed = Lwt.wait () in
-  {
-    connected;
-    connecting;
-    closing;
-    closed;
-    readb = B.create 4096;
-    readm = Lwt_mutex.create ();
-    readc = Lwt_condition.create ();
-    writem = Lwt_mutex.create ();
-    writec = Lwt_condition.create ();
-  }
-
-let socket ctx =
-  let sock = utp_create_socket ctx in
-  let info = create_info () in
-  utp_set_userdata sock info;
-  sock
-
 let connect sock addr =
   let info = utp_get_userdata sock in
   utp_connect sock addr;
   info.connecting
-
-let on_read sock buf =
-  let info = utp_get_userdata sock in
-  B.push info.readb buf;
-  Lwt_condition.signal info.readc ();
-  utp_read_drained sock
-
-let read sock buf off len =
-  let info = utp_get_userdata sock in
-  let rec loop () =
-    let n = B.pop info.readb buf off len in
-    if n = 0 && len > 0 then
-      Lwt_condition.wait info.readc >>= loop
-    else
-      Lwt.return n
-  in
-  Lwt_mutex.with_lock info.readm loop
-
-let on_writeable sock =
-  let info = utp_get_userdata sock in
-  Printf.eprintf "on_writable\n%!";
-  Lwt_condition.signal info.writec ()
-
-let write sock buf off len =
-  let info = utp_get_userdata sock in
-  Printf.eprintf "write len=%d\n%!" len;
-  let rec loop () =
-    let n = utp_write sock buf off len in
-    if n = 0 && len > 0 then
-      Lwt_condition.wait info.writec >>= loop
-    else
-      Lwt.return n
-  in
-  Lwt_mutex.with_lock info.writem loop
 
 external sendto_bytes: Unix.file_descr -> Lwt_bytes.t -> int -> int -> Unix.sockaddr -> unit = "caml_sendto_bytes" "noalloc"
 
@@ -281,19 +226,6 @@ let on_error sock err =
   (*     Lwt.wakeup_exn info.connected (Failure "connection failed") *)
   (* | ECONNRESET -> *)
   (*     () (\* CHECK *\) *)
-
-let on_state_change sock st =
-  let info = utp_get_userdata sock in
-  match st with
-  | STATE_CONNECT ->
-      Lwt.wakeup info.connected ()
-      (* on_writeable sock *)
-  | STATE_WRITABLE ->
-      on_writeable sock
-  | STATE_EOF ->
-      cancel_io info
-  | STATE_DESTROYING ->
-      Lwt.wakeup info.closed ()
 
 let get_stats sock =
   utp_get_stats sock
@@ -322,8 +254,6 @@ let context () =
   let fd = Lwt_unix.socket Lwt_unix.PF_INET Lwt_unix.SOCK_DGRAM 0 in
   let ctx = utp_init 2 in
 
-  utp_set_callback ctx ON_READ on_read;
-  utp_set_callback ctx ON_STATE_CHANGE on_state_change;
   utp_set_callback ctx ON_ERROR on_error;
   utp_set_callback ctx ON_SENDTO (on_sendto fd);
   utp_set_callback ctx ON_LOG on_log;

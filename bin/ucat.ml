@@ -71,16 +71,6 @@ let anon_fun =
 let die fmt =
   Printf.ksprintf failwith fmt
 
-let complete f buf off len =
-  let rec loop off len =
-    if len <= 0 then
-      Lwt.return_unit
-    else
-      let%lwt n = f buf off len in
-      loop (off + n) (len - n)
-  in
-  loop off len
-
 module U = Lwt_unix
 
 let lookup addr port =
@@ -146,6 +136,18 @@ let main () =
       let sock = Utp.socket ctx in
       let%lwt () = Utp.connect sock addr in
       debug "Connected to %s" (string_of_sockaddr addr);
+      let writable = Lwt_condition.create () in
+      Utp.set_socket_callback sock Utp.ON_WRITABLE (Lwt_condition.signal writable);
+      let rec write sock buf off len =
+        if len = 0 then
+          Lwt.return_unit
+        else
+          let n = Utp.write sock buf off len in
+          if n = 0 then
+            Lwt_condition.wait writable >> write sock buf off len
+          else
+            write sock buf (off + n) (len - n)
+      in
       let rec loop () =
         match%lwt Lwt_io.read_into Lwt_io.stdin buf 0 (Bytes.length buf) with
         | 0 ->
@@ -153,7 +155,7 @@ let main () =
             Utp.close sock
         | len ->
             debug "Read %d bytes from stdin" len;
-            complete (Utp.write sock) buf 0 len >> loop ()
+            write sock buf 0 len >> loop ()
       in
       loop ()
   | true ->
@@ -163,17 +165,11 @@ let main () =
       let on_accept sock addr =
         incr id;
         debug "Connection accepted from %s" (string_of_sockaddr addr);
-        let buf = Bytes.create 4096 in
-        let rec loop1 () =
-          match%lwt Utp.read sock buf 0 4096 with
-          | 0 ->
-              Lwt.return_unit
-          | n ->
-              debug "Received %d bytes from #%d" n !id;
-              let%lwt () = Lwt_io.write_from_exactly Lwt_io.stdout buf 0 n in
-              loop1 ()
+        let on_read buf =
+          debug "Received %d bytes from #%d" (Lwt_bytes.length buf) !id
+          (* Lwt_io.write_from_exactly Lwt_io.stdout buf 0 n *)
         in
-        Lwt.async loop1;
+        Utp.set_socket_callback sock Utp.ON_READ on_read
       in
       Utp.set_context_callback ctx Utp.ON_ACCEPT on_accept;
       let t, _ = Lwt.wait () in
