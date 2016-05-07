@@ -118,9 +118,6 @@ let main () =
   if not !o_listen && (!o_remote_port = 0 || !o_remote_address = "") then
     raise Exit;
 
-  let buf = Bytes.create !o_buf_size in
-  debug "Allocated %d buffer" !o_buf_size;
-
   let ctx = Utp.context () in
 
   if !o_debug >= 2 then begin
@@ -156,15 +153,16 @@ let main () =
       in
       let read_loop () =
         let rec loop () =
-          match%lwt Lwt_io.read_into Lwt_io.stdin buf 0 (Bytes.length buf) with
-          | 0 ->
+          match%lwt Lwt_io.read_line Lwt_io.stdin with
+          | exception End_of_file ->
               debug "Read EOF from stdin; closing socket";
               let t = Lwt_condition.wait closed in
               Utp.close sock;
               t
-          | len ->
-              debug "Read %d bytes from stdin" len;
-              write sock buf 0 len >> loop ()
+          | line ->
+              let line = line ^ "\n" in
+              debug "Read %d bytes from stdin" (String.length line);
+              write sock line 0 (String.length line) >> loop ()
         in
         loop ()
       in
@@ -173,18 +171,27 @@ let main () =
   | true ->
       let%lwt addr = lookup !o_local_address !o_local_port in
       Utp.bind ctx addr;
-      let id = ref (-1) in
-      let on_read buf =
-        debug "Received %d bytes from #%d" (Lwt_bytes.length buf) !id;
+      let t, u = Lwt.wait () in
+      let on_read id buf =
+        debug "Received %d bytes from #%d" (Lwt_bytes.length buf) id;
         Printf.eprintf "%s%!" (Lwt_bytes.to_string buf)
       in
+      let on_close id () =
+        debug "Socket #%d closed" id
+      in
+      let on_eof sock id () =
+        debug "Socket #%d eof'd" id;
+        Utp.close sock
+      in
+      let id = ref (-1) in
       let on_accept sock addr =
         incr id;
         debug "Connection accepted from %s" (string_of_sockaddr addr);
-        Utp.set_socket_callback sock Utp.ON_READ on_read
+        Utp.set_socket_callback sock Utp.ON_READ (on_read !id);
+        Utp.set_socket_callback sock Utp.ON_EOF (on_eof sock !id);
+        Utp.set_socket_callback sock Utp.ON_CLOSE (on_close !id)
       in
       Utp.set_context_callback ctx Utp.ON_ACCEPT on_accept;
-      let t, _ = Lwt.wait () in
       t
 
 let () =

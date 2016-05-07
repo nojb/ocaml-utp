@@ -80,9 +80,11 @@ static uint64 on_read (utp_callback_arguments* a)
 
 static uint64 on_state_change (utp_callback_arguments *a)
 {
+  utp_context_userdata *cu;
   utp_userdata *u;
-  value cb;
+  value cb = 0;
 
+  cu = utp_context_get_userdata (a->context);
   u = utp_get_userdata (a->socket);
 
   switch (a->state) {
@@ -95,11 +97,12 @@ static uint64 on_state_change (utp_callback_arguments *a)
     case UTP_STATE_EOF:
       cb = u->on_eof;
       break;
-    case UTP_STATE_DESTROYING: // TODO FIXME
+    case UTP_STATE_DESTROYING:
+      cu->sockets --;
       cb = u->on_close;
       break;
     default:
-      caml_invalid_argument("callback_on_state_change");
+      UTP_DEBUG("unknown state change");
       break;
   }
 
