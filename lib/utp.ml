@@ -73,65 +73,6 @@ type context_stats =
     nraw_send_huge : int;
   }
 
-module B : sig
-  type t
-
-  val create : int -> t
-  val push : t -> Lwt_bytes.t -> unit
-  val pop : t -> bytes -> int -> int -> int
-  val length : t -> int
-  val shrink : t -> unit
-end = struct
-  type t =
-    {
-      mutable data : bytes;
-      mutable max : int;
-    }
-
-  let create n =
-    let m = ref 2 in
-    while !m < n do m := 2 * !m done;
-    {
-      data = Bytes.create !m;
-      max = 0;
-    }
-
-  let resize b n =
-    if n + b.max > Bytes.length b.data then begin
-      let new_len = ref (2 * Bytes.length b.data) in
-      while !new_len < n + b.max do new_len := 2 * !new_len done;
-      Printf.eprintf "Resizing buffer to %d bytes\n%!" !new_len;
-      let new_data = Bytes.create !new_len in
-      Bytes.blit b.data 0 new_data 0 b.max;
-      b.data <- new_data
-    end
-
-  let push b buf =
-    resize b (Lwt_bytes.length buf);
-    Lwt_bytes.blit_to_bytes buf 0 b.data b.max (Lwt_bytes.length buf);
-    b.max <- b.max + Lwt_bytes.length buf
-
-  let pop b buf off len =
-    let n = min len b.max in
-    Bytes.blit b.data 0 buf off n;
-    if n < b.max then Bytes.blit b.data n b.data 0 (b.max - n);
-    b.max <- b.max - n;
-    n
-
-  let length b =
-    b.max
-
-  let shrink b =
-    let m = ref 2 in
-    while !m < b.max do m := 2 * !m done;
-    if 2 * !m < Bytes.length b.data then begin
-      Printf.eprintf "Shrinking buffer to %d bytes\n%!" !m;
-      let new_data = Bytes.create !m in
-      Bytes.blit b.data 0 new_data 0 b.max;
-      b.data <- new_data
-    end
-end
-
 type socket_info =
   {
     connected : unit Lwt.u;
