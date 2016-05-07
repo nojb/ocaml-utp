@@ -20,8 +20,27 @@
    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE. *)
 
-type utp_context
+type context
 type socket
+
+type state =
+  | STATE_CONNECT
+  | STATE_WRITABLE
+  | STATE_EOF
+  | STATE_DESTROYING
+
+type error =
+  | ECONNREFUSED
+  | ECONNRESET
+  | ETIMEDOUT
+
+type _ utp_context_callback =
+  | ON_READ : (socket -> Lwt_bytes.t -> unit) utp_context_callback
+  | ON_STATE_CHANGE : (socket -> state -> unit) utp_context_callback
+  | ON_ERROR : (socket -> error -> unit) utp_context_callback
+  | ON_SENDTO : (context -> Unix.sockaddr -> Lwt_bytes.t -> unit) utp_context_callback
+  | ON_LOG : (socket -> string -> unit) utp_context_callback
+  | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) utp_context_callback
 
 type socket_stats =
   {
@@ -47,13 +66,6 @@ type context_stats =
     nraw_send_mid : int;
     nraw_send_big : int;
     nraw_send_huge : int;
-  }
-
-type context =
-  {
-    utp_ctx : utp_context;
-    fd : Lwt_unix.file_descr;
-    accepting : (socket * Unix.sockaddr) Lwt.u Lwt_sequence.t;
   }
 
 module B : sig
@@ -136,64 +148,51 @@ type _ option =
   | RCVBUF : int option
   | TARGET_DELAY : int option
 
-external utp_init : int -> utp_context = "caml_utp_init"
-external utp_destroy : utp_context -> unit = "caml_utp_destroy"
-external utp_create_socket : utp_context -> socket = "caml_utp_create_socket"
+external utp_init : int -> context = "caml_utp_init"
+external utp_set_callback : context -> 'a utp_context_callback -> 'a -> unit = "caml_utp_set_callback"
+external utp_destroy : context -> unit = "caml_utp_destroy"
+external utp_create_socket : context -> socket = "caml_utp_create_socket"
 external utp_get_userdata : socket -> socket_info = "caml_utp_get_userdata"
 external utp_set_userdata : socket -> socket_info -> unit = "caml_utp_set_userdata"
 external utp_write : socket -> bytes -> int -> int -> int = "caml_utp_write"
 external utp_read_drained : socket -> unit = "caml_utp_read_drained"
-external utp_issue_deferred_acks : utp_context -> unit = "caml_utp_issue_deferred_acks"
-external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
-external utp_process_udp : utp_context -> Lwt_bytes.t -> int -> Unix.sockaddr -> bool = "caml_utp_process_udp"
+external utp_issue_deferred_acks : context -> unit = "caml_utp_issue_deferred_acks"
+external utp_check_timeouts : context -> unit = "caml_utp_check_timeouts"
+external utp_process_udp : context -> Lwt_bytes.t -> int -> Unix.sockaddr -> bool = "caml_utp_process_udp"
 external utp_connect : socket -> Unix.sockaddr -> unit = "caml_utp_connect"
-external utp_check_timeouts : utp_context -> unit = "caml_utp_check_timeouts"
+external utp_check_timeouts : context -> unit = "caml_utp_check_timeouts"
 external utp_close : socket -> unit = "caml_utp_close"
 external utp_get_stats : socket -> socket_stats = "caml_utp_get_stats"
-external utp_get_context : socket -> utp_context = "caml_utp_get_context"
-external utp_context_get_userdata : utp_context -> context = "caml_utp_context_get_userdata"
-external utp_context_set_userdata : utp_context -> context -> unit = "caml_utp_context_set_userdata"
-external utp_get_context_stats : utp_context -> context_stats = "caml_utp_get_context_stats"
+external utp_get_context : socket -> context = "caml_utp_get_context"
+external utp_context_get_userdata : context -> context = "caml_utp_context_get_userdata"
+external utp_context_set_userdata : context -> context -> unit = "caml_utp_context_set_userdata"
+external utp_get_context_stats : context -> context_stats = "caml_utp_get_context_stats"
 external utp_getsockopt : socket -> 'a option -> 'a = "caml_utp_getsockopt"
 external utp_setsockopt : socket -> 'a option -> 'a -> unit = "caml_utp_setsockopt"
-external utp_context_get_option : utp_context -> 'a option -> 'a = "caml_utp_context_get_option"
-external utp_context_set_option : utp_context -> 'a option -> 'a -> unit = "caml_utp_context_set_option"
+external utp_context_get_option : context -> 'a option -> 'a = "caml_utp_context_get_option"
+external utp_context_set_option : context -> 'a option -> 'a -> unit = "caml_utp_context_set_option"
 external utp_getpeername : socket -> Unix.inet_addr = "caml_utp_getpeername"
 
 open Lwt.Infix
 
-let rec check_timeouts ctx =
+let rec check_timeouts utp_ctx =
   Lwt_unix.sleep 0.5 >>= fun () ->
-  utp_check_timeouts ctx.utp_ctx;
-  check_timeouts ctx
+  utp_check_timeouts utp_ctx;
+  check_timeouts utp_ctx
 
-let network_loop ctx =
+let network_loop fd utp_ctx =
   let socket_data = Lwt_bytes.create 4096 in
   let rec loop () =
-    Lwt_bytes.recvfrom ctx.fd socket_data 0 4096 [] >>= fun (n, sa) ->
-    let _ : bool = utp_process_udp ctx.utp_ctx socket_data n sa in
-    if not (Lwt_unix.readable ctx.fd) then utp_issue_deferred_acks ctx.utp_ctx;
+    Lwt_bytes.recvfrom fd socket_data 0 4096 [] >>= fun (n, sa) ->
+    let _ : bool = utp_process_udp utp_ctx socket_data n sa in
+    if not (Lwt_unix.readable fd) then utp_issue_deferred_acks utp_ctx;
     loop ()
   in
   loop ()
 
-let context () =
-  let fd = Lwt_unix.socket Lwt_unix.PF_INET Lwt_unix.SOCK_DGRAM 0 in
-  let utp_ctx = utp_init 2 in
-  let ctx =
-    {
-      utp_ctx;
-      fd;
-      accepting = Lwt_sequence.create ();
-    }
-  in
-  utp_context_set_userdata utp_ctx ctx;
-  Lwt.ignore_result (check_timeouts ctx);
-  Lwt.ignore_result (network_loop ctx);
-  ctx
-
 let bind ctx addr =
-  Lwt_unix.bind ctx.fd addr
+  assert false
+  (* Lwt_unix.bind ctx.fd addr *)
 
 let create_info () =
   let connecting, connected = Lwt.wait () in
@@ -211,7 +210,7 @@ let create_info () =
   }
 
 let socket ctx =
-  let sock = utp_create_socket ctx.utp_ctx in
+  let sock = utp_create_socket ctx in
   let info = create_info () in
   utp_set_userdata sock info;
   sock
@@ -222,10 +221,12 @@ let connect sock addr =
   info.connecting
 
 let accept ctx =
-  Lwt.add_task_l ctx.accepting >>= fun (sock, sa) ->
-  let info = create_info () in
-  utp_set_userdata sock info;
-  Lwt.return (sock, sa)
+  assert false
+(* let accept ctx = *)
+(*   Lwt.add_task_l ctx.accepting >>= fun (sock, sa) -> *)
+(*   let info = create_info () in *)
+(*   utp_set_userdata sock info; *)
+(*   Lwt.return (sock, sa) *)
 
 let on_read sock buf =
   let info = utp_get_userdata sock in
@@ -261,17 +262,11 @@ let write sock buf off len =
   in
   Lwt_mutex.with_lock info.writem loop
 
-type error =
-  | ECONNREFUSED
-  | ECONNRESET
-  | ETIMEDOUT
-
 external sendto_bytes: Unix.file_descr -> Lwt_bytes.t -> int -> int -> Unix.sockaddr -> unit = "caml_sendto_bytes" "noalloc"
 
-let on_sendto utp_ctx addr buf =
-  let ctx = utp_context_get_userdata utp_ctx in
-  Lwt_unix.check_descriptor ctx.fd;
-  sendto_bytes (Lwt_unix.unix_file_descr ctx.fd) buf 0 (Lwt_bytes.length buf) addr
+let on_sendto fd utp_ctx addr buf =
+  Lwt_unix.check_descriptor fd;
+  sendto_bytes (Lwt_unix.unix_file_descr fd) buf 0 (Lwt_bytes.length buf) addr
 
 let on_log _sock str =
   prerr_string "log: ";
@@ -293,18 +288,10 @@ let on_error sock err =
   (* | ECONNRESET -> *)
   (*     () (\* CHECK *\) *)
 
-let on_accept sock addr =
-  let utp_ctx = utp_get_context sock in
-  let ctx = utp_context_get_userdata utp_ctx in
-  match Lwt_sequence.take_opt_r ctx.accepting with
+let on_accept accepting sock addr =
+  match Lwt_sequence.take_opt_r accepting with
   | None -> ()
   | Some u -> Lwt.wakeup u (sock, addr)
-
-type state =
-  | STATE_CONNECT
-  | STATE_WRITABLE
-  | STATE_EOF
-  | STATE_DESTROYING
 
 let on_state_change sock st =
   let info = utp_get_userdata sock in
@@ -328,7 +315,7 @@ let close sock =
   info.closing
 
 let get_context_stats ctx =
-  utp_get_context_stats ctx.utp_ctx
+  utp_get_context_stats ctx
 
 let get_opt sock opt =
   utp_getsockopt sock opt
@@ -337,15 +324,23 @@ let set_opt sock opt v =
   utp_setsockopt sock opt v
 
 let get_context_opt ctx opt =
-  utp_context_get_option ctx.utp_ctx opt
+  utp_context_get_option ctx opt
 
 let set_context_opt ctx opt v =
-  utp_context_set_option ctx.utp_ctx opt v
+  utp_context_set_option ctx opt v
 
-let () =
-  Callback.register "caml_utp_on_read" on_read;
-  Callback.register "caml_utp_on_state_change" on_state_change;
-  Callback.register "caml_utp_on_error" on_error;
-  Callback.register "caml_utp_on_sendto" on_sendto;
-  Callback.register "caml_utp_on_log" on_log;
-  Callback.register "caml_utp_on_accept" on_accept
+let context () =
+  let fd = Lwt_unix.socket Lwt_unix.PF_INET Lwt_unix.SOCK_DGRAM 0 in
+  let utp_ctx = utp_init 2 in
+  let accepting = Lwt_sequence.create () in
+
+  utp_set_callback utp_ctx ON_READ on_read;
+  utp_set_callback utp_ctx ON_STATE_CHANGE on_state_change;
+  utp_set_callback utp_ctx ON_ERROR on_error;
+  utp_set_callback utp_ctx ON_SENDTO (on_sendto fd);
+  utp_set_callback utp_ctx ON_LOG on_log;
+  utp_set_callback utp_ctx ON_ACCEPT (on_accept accepting);
+
+  Lwt.ignore_result (check_timeouts utp_ctx);
+  Lwt.ignore_result (network_loop fd utp_ctx);
+  utp_ctx

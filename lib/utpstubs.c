@@ -35,61 +35,101 @@
 
 #include "utp.h"
 
-static uint64 callback_on_read(utp_callback_arguments* a)
+typedef struct {
+  utp_context *context;
+
+  value on_read;
+  value on_state_change;
+  value on_error;
+  value on_sendto;
+  value on_log;
+  value on_accept;
+} utp_context_userdata;
+
+typedef struct {
+  utp_socket *socket;
+
+  value on_read;
+} utp_userdata;
+
+static uint64 callback_on_read (utp_callback_arguments* a)
 {
-  value ba = caml_ba_alloc_dims(CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *)a->buf, a->len);
+  utp_context_userdata *u = utp_context_get_userdata (a->context);
+
+  value ba = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
 
   if (!ba) {
-    caml_raise_out_of_memory();
+    caml_raise_out_of_memory ();
   }
 
-  caml_callback2 (*caml_named_value("caml_utp_on_read"), (value)a->socket, ba);
+  if (u->on_read) {
+    caml_callback2 (u->on_read, (value) a->socket, ba);
+  }
+
+  /* utp_read_drained (a->socket); */
+
   return 0;
 }
 
-static uint64 callback_on_state_change(utp_callback_arguments *a)
+static uint64 callback_on_state_change (utp_callback_arguments *a)
 {
+  utp_context_userdata *u;
   int state;
+
   switch (a->state) {
-  case UTP_STATE_CONNECT:
-    state = 0;
-    break;
-  case UTP_STATE_WRITABLE:
-    state = 1;
-    break;
-  case UTP_STATE_EOF:
-    state = 2;
-    break;
-  case UTP_STATE_DESTROYING:
-    state = 3;
-    break;
-  default:
-    caml_invalid_argument("callback_on_state_change");
-    break;
+    case UTP_STATE_CONNECT:
+      state = 0;
+      break;
+    case UTP_STATE_WRITABLE:
+      state = 1;
+      break;
+    case UTP_STATE_EOF:
+      state = 2;
+      break;
+    case UTP_STATE_DESTROYING:
+      state = 3;
+      break;
+    default:
+      caml_invalid_argument("callback_on_state_change");
+      break;
   }
-  caml_callback2(*caml_named_value("caml_utp_on_state_change"), (value)a->socket, Val_int(state));
+
+  u = utp_context_get_userdata (a->context);
+
+  if (u->on_state_change) {
+    caml_callback2(u->on_state_change, (value)a->socket, Val_int(state));
+  }
+
   return 0;
 }
 
-static uint64 callback_on_error(utp_callback_arguments *a)
+static uint64 callback_on_error (utp_callback_arguments *a)
 {
+  utp_context_userdata *u;
   int i;
+
   switch (a->error_code) {
-  case UTP_ECONNREFUSED:
-    i = 0;
-    break;
-  case UTP_ECONNRESET:
-    i = 1;
-    break;
-  case UTP_ETIMEDOUT:
-    i = 2;
-    break;
+    case UTP_ECONNREFUSED:
+      i = 0;
+      break;
+    case UTP_ECONNRESET:
+      i = 1;
+      break;
+    case UTP_ETIMEDOUT:
+      i = 2;
+      break;
   }
-  caml_callback2(*caml_named_value("caml_utp_on_error"), (value)a->socket, Val_int(i));
+
+  u = utp_context_get_userdata (a->context);
+
+  if (u->on_error) {
+    caml_callback2(u->on_error, (value) a->socket, Val_int(i));
+  }
+
   return 0;
 }
 
-static uint64 callback_on_sendto(utp_callback_arguments *a)
+static uint64 callback_on_sendto (utp_callback_arguments *a)
 {
   CAMLparam0();
   CAMLlocal2(addr, buf);
@@ -98,37 +138,48 @@ static uint64 callback_on_sendto(utp_callback_arguments *a)
   socklen_param_type sock_addr_len;
 
   sock_addr_len = sizeof (struct sockaddr_in);
-  memcpy(&sock_addr.s_inet, (struct sockaddr_in *)a->address, sock_addr_len);
+  memcpy (&sock_addr.s_inet, (struct sockaddr_in *)a->address, sock_addr_len);
   addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
 
   if (!addr) {
     caml_raise_out_of_memory();
   }
 
-  buf = caml_ba_alloc_dims(CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *)a->buf, a->len);
+  buf = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *)a->buf, a->len);
 
   if (!buf) {
-    caml_raise_out_of_memory();
+    caml_raise_out_of_memory ();
   }
 
-  caml_callback3(*caml_named_value("caml_utp_on_sendto"), (value)a->context, addr, buf);
+  utp_context_userdata *u = utp_context_get_userdata (a->context);
+
+  if (u->on_sendto) {
+    caml_callback3 (u->on_sendto, (value) a->context, addr, buf);
+  }
 
   CAMLreturn(0);
 }
 
-static uint64 callback_on_log(utp_callback_arguments *a)
+static uint64 callback_on_log (utp_callback_arguments *a)
 {
+  utp_context_userdata *u;
   value str;
 
   str = caml_alloc_string(strlen((char *)a->buf));
   strcpy(String_val(str), (char *)a->buf);
-  caml_callback2(*caml_named_value("caml_utp_on_log"), (value)a->socket, str);
+
+  u = utp_context_get_userdata (a->context);
+
+  if (u->on_log) {
+    caml_callback2(u->on_log, (value) a->socket, str);
+  }
 
   return 0;
 }
 
-static uint64 callback_on_accept(utp_callback_arguments *a)
+static uint64 callback_on_accept (utp_callback_arguments *a)
 {
+  utp_context_userdata *u;
   union sock_addr_union sock_addr;
   socklen_param_type sock_addr_len;
   value addr;
@@ -141,7 +192,11 @@ static uint64 callback_on_accept(utp_callback_arguments *a)
     caml_raise_out_of_memory();
   }
 
-  caml_callback2(*caml_named_value("caml_utp_on_accept"), (value)a->socket, addr);
+  u = utp_context_get_userdata (a->context);
+
+  if (u->on_accept) {
+    caml_callback2(u->on_accept, (value) a->socket, addr);
+  }
 
   return 0;
 }
@@ -195,11 +250,53 @@ CAMLprim value caml_utp_close(value sock)
   return Val_unit;
 }
 
+CAMLprim value caml_utp_set_callback(value ctx, value cb, value fun)
+{
+  CAMLparam3(ctx, cb, fun);
+
+  utp_context_userdata *u = utp_context_get_userdata((utp_context *) ctx);
+  value *cbaddr;
+
+  switch (Int_val(cb)) {
+    case 0:
+      cbaddr = &(u->on_read);
+      break;
+    case 1:
+      cbaddr = &(u->on_state_change);
+      break;
+    case 2:
+      cbaddr = &(u->on_error);
+      break;
+    case 3:
+      cbaddr = &(u->on_sendto);
+      break;
+    case 4:
+      cbaddr = &(u->on_log);
+      break;
+    case 5:
+      cbaddr = &(u->on_accept);
+      break;
+  }
+
+  if (*cbaddr) {
+    caml_modify_generational_global_root(cbaddr, fun);
+  } else {
+    *cbaddr = fun;
+    caml_register_generational_global_root(cbaddr);
+  }
+
+  CAMLreturn(Val_unit);
+}
+
 CAMLprim value caml_utp_init(value version)
 {
   utp_context *utp_ctx;
+  utp_context_userdata *u;
 
   utp_ctx = utp_init(Int_val(version));
+  u = calloc(1, sizeof(utp_context_userdata));
+
+  utp_context_set_userdata (utp_ctx, u);
 
   utp_set_callback(utp_ctx, UTP_ON_READ, callback_on_read);
   utp_set_callback(utp_ctx, UTP_ON_STATE_CHANGE, callback_on_state_change);
