@@ -41,7 +41,6 @@ typedef struct {
 
   value on_error;
   value on_sendto;
-  value on_log;
   value on_accept;
 } utp_context_userdata;
 
@@ -165,20 +164,11 @@ static uint64 callback_on_sendto (utp_callback_arguments *a)
   CAMLreturn(0);
 }
 
+#define UTP_DEBUG(msg) fprintf(stderr, "debug utp: %s\n", (const char *) msg)
+
 static uint64 callback_on_log (utp_callback_arguments *a)
 {
-  utp_context_userdata *u;
-  value str;
-
-  str = caml_alloc_string(strlen((char *)a->buf));
-  strcpy(String_val(str), (char *)a->buf);
-
-  u = utp_context_get_userdata (a->context);
-
-  if (u->on_log) {
-    caml_callback2(u->on_log, (value) a->socket, str);
-  }
-
+  UTP_DEBUG(a->buf);
   return 0;
 }
 
@@ -222,33 +212,30 @@ CAMLprim value caml_utp_close(value sock)
   return Val_unit;
 }
 
-CAMLprim value caml_utp_set_callback(value ctx, value cb, value fun)
+CAMLprim value caml_utp_set_callback(value ctx, value cbnum, value fun)
 {
-  CAMLparam3(ctx, cb, fun);
+  CAMLparam3(ctx, cbnum, fun);
 
   utp_context_userdata *u = utp_context_get_userdata((utp_context *) ctx);
-  value *cbaddr;
+  value *cb;
 
-  switch (Int_val(cb)) {
+  switch (Int_val(cbnum)) {
     case 0:
-      cbaddr = &(u->on_error);
+      cb = &(u->on_error);
       break;
     case 1:
-      cbaddr = &(u->on_sendto);
+      cb = &(u->on_sendto);
       break;
     case 2:
-      cbaddr = &(u->on_log);
-      break;
-    case 3:
-      cbaddr = &(u->on_accept);
+      cb = &(u->on_accept);
       break;
   }
 
-  if (*cbaddr) {
-    caml_modify_generational_global_root(cbaddr, fun);
+  if (*cb) {
+    caml_modify_generational_global_root(cb, fun);
   } else {
-    *cbaddr = fun;
-    caml_register_generational_global_root(cbaddr);
+    *cb = fun;
+    caml_register_generational_global_root(cb);
   }
 
   CAMLreturn(Val_unit);

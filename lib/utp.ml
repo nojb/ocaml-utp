@@ -23,12 +23,6 @@
 type context
 type socket
 
-type state =
-  | STATE_CONNECT
-  | STATE_WRITABLE
-  | STATE_EOF
-  | STATE_DESTROYING
-
 type error =
   | ECONNREFUSED
   | ECONNRESET
@@ -37,7 +31,6 @@ type error =
 type _ context_callback =
   | ON_ERROR : (socket -> error -> unit) context_callback
   | ON_SENDTO : (context -> Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
-  | ON_LOG : (socket -> string -> unit) context_callback
   | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) context_callback
 
 type _ callback =
@@ -149,7 +142,6 @@ let context () =
   let ctx = utp_init 2 in
 
   set_context_callback ctx ON_SENDTO on_sendto;
-  set_context_callback ctx ON_LOG on_log;
 
   Lwt.ignore_result (check_timeouts ctx);
   Lwt.ignore_result (network_loop ctx);
