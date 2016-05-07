@@ -89,10 +89,10 @@ external close : socket -> unit = "caml_utp_close"
 external get_stats : socket -> socket_stats = "caml_utp_get_stats"
 external utp_get_context : socket -> context = "caml_utp_get_context"
 external get_context_stats : context -> context_stats = "caml_utp_get_context_stats"
-external utp_getsockopt : socket -> 'a option -> 'a = "caml_utp_getsockopt"
-external utp_setsockopt : socket -> 'a option -> 'a -> unit = "caml_utp_setsockopt"
-external utp_context_get_option : context -> 'a option -> 'a = "caml_utp_context_get_option"
-external utp_context_set_option : context -> 'a option -> 'a -> unit = "caml_utp_context_set_option"
+external get_opt: socket -> 'a option -> 'a = "caml_utp_getsockopt"
+external set_opt: socket -> 'a option -> 'a -> unit = "caml_utp_setsockopt"
+external get_context_opt: context -> 'a option -> 'a = "caml_utp_context_get_option"
+external set_context_opt: context -> 'a option -> 'a -> unit = "caml_utp_context_set_option"
 external utp_getpeername : socket -> Unix.inet_addr = "caml_utp_getpeername"
 external utp_file_descr: context -> Unix.file_descr = "caml_utp_file_descr"
 external bind: context -> Unix.sockaddr -> unit = "caml_utp_bind"
@@ -121,22 +121,6 @@ let on_sendto ctx addr buf =
   let fd = Lwt_unix.of_unix_file_descr (utp_file_descr ctx) in
   Lwt_unix.check_descriptor fd;
   sendto_bytes (Lwt_unix.unix_file_descr fd) buf 0 (Lwt_bytes.length buf) addr
-
-let on_log _sock str =
-  prerr_string "log: ";
-  prerr_endline str
-
-let get_opt sock opt =
-  utp_getsockopt sock opt
-
-let set_opt sock opt v =
-  utp_setsockopt sock opt v
-
-let get_context_opt ctx opt =
-  utp_context_get_option ctx opt
-
-let set_context_opt ctx opt v =
-  utp_context_set_option ctx opt v
 
 let context () =
   let ctx = utp_init 2 in
