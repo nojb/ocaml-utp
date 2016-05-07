@@ -1,6 +1,6 @@
 /* The MIT License (MIT)
 
-   Copyright (c) 2015 Nicolas Ojeda Bar <n.oje.bar@gmail.com>
+   Copyright (c) 2015-2016 Nicolas Ojeda Bar <n.oje.bar@gmail.com>
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
@@ -148,14 +148,14 @@ static uint64 on_sendto (utp_callback_arguments *a)
   socklen_param_type sock_addr_len;
 
   sock_addr_len = sizeof (struct sockaddr_in);
-  memcpy (&sock_addr.s_inet, (struct sockaddr_in *)a->address, sock_addr_len);
+  memcpy (&sock_addr.s_inet, (struct sockaddr_in *) a->address, sock_addr_len);
   addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
 
   if (!addr) {
     caml_raise_out_of_memory();
   }
 
-  buf = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *)a->buf, a->len);
+  buf = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
 
   if (!buf) {
     caml_raise_out_of_memory ();
@@ -397,21 +397,19 @@ CAMLprim value caml_utp_write (value socket, value buf, value off, value len)
   CAMLparam4(socket, buf, off, len);
 
   ssize_t written;
-  void *utp_buf;
 
-  utp_buf = String_val(buf) + Int_val(off);
-  written = utp_write ((utp_socket *) socket, utp_buf, Int_val(len));
+  written = utp_write ((utp_socket *) socket, String_val(buf) + Int_val(off), Int_val(len));
 
   if (written < 0) {
-    caml_failwith("utp_write");
+    caml_failwith ("utp_stubs: caml_utp_write");
   }
 
   CAMLreturn(Val_int(written));
 }
 
-CAMLprim value caml_utp_check_timeouts(value ctx)
+CAMLprim value caml_utp_check_timeouts (value ctx)
 {
-  utp_check_timeouts((utp_context *)ctx);
+  utp_check_timeouts ((utp_context *) ctx);
 
   return Val_unit;
 }
