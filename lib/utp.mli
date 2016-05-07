@@ -34,13 +34,13 @@ type error =
   | ECONNRESET
   | ETIMEDOUT
 
-type _ utp_context_callback =
-  | ON_READ : (socket -> Lwt_bytes.t -> unit) utp_context_callback
-  | ON_STATE_CHANGE : (socket -> state -> unit) utp_context_callback
-  | ON_ERROR : (socket -> error -> unit) utp_context_callback
-  | ON_SENDTO : (context -> Unix.sockaddr -> Lwt_bytes.t -> unit) utp_context_callback
-  | ON_LOG : (socket -> string -> unit) utp_context_callback
-  | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) utp_context_callback
+type _ context_callback =
+  | ON_READ : (socket -> Lwt_bytes.t -> unit) context_callback
+  | ON_STATE_CHANGE : (socket -> state -> unit) context_callback
+  | ON_ERROR : (socket -> error -> unit) context_callback
+  | ON_SENDTO : (context -> Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
+  | ON_LOG : (socket -> string -> unit) context_callback
+  | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) context_callback
 
 type socket_stats =
   {
@@ -77,7 +77,7 @@ type _ option =
   | TARGET_DELAY : int option
 
 val context : unit -> context
-val set_context_callback: context -> 'a utp_context_callback -> 'a -> unit
+val set_context_callback: context -> 'a context_callback -> 'a -> unit
 
 val socket : context -> socket
 val connect : socket -> Unix.sockaddr -> unit Lwt.t

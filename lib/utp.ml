@@ -34,13 +34,13 @@ type error =
   | ECONNRESET
   | ETIMEDOUT
 
-type _ utp_context_callback =
-  | ON_READ : (socket -> Lwt_bytes.t -> unit) utp_context_callback
-  | ON_STATE_CHANGE : (socket -> state -> unit) utp_context_callback
-  | ON_ERROR : (socket -> error -> unit) utp_context_callback
-  | ON_SENDTO : (context -> Unix.sockaddr -> Lwt_bytes.t -> unit) utp_context_callback
-  | ON_LOG : (socket -> string -> unit) utp_context_callback
-  | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) utp_context_callback
+type _ context_callback =
+  | ON_READ : (socket -> Lwt_bytes.t -> unit) context_callback
+  | ON_STATE_CHANGE : (socket -> state -> unit) context_callback
+  | ON_ERROR : (socket -> error -> unit) context_callback
+  | ON_SENDTO : (context -> Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
+  | ON_LOG : (socket -> string -> unit) context_callback
+  | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) context_callback
 
 type socket_stats =
   {
@@ -149,7 +149,7 @@ type _ option =
   | TARGET_DELAY : int option
 
 external utp_init : int -> context = "caml_utp_init"
-external utp_set_callback : context -> 'a utp_context_callback -> 'a -> unit = "caml_utp_set_callback"
+external utp_set_callback : context -> 'a context_callback -> 'a -> unit = "caml_utp_set_callback"
 external utp_destroy : context -> unit = "caml_utp_destroy"
 external utp_create_socket : context -> socket = "caml_utp_create_socket"
 external utp_get_userdata : socket -> socket_info = "caml_utp_get_userdata"
