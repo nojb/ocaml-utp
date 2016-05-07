@@ -173,6 +173,8 @@ external utp_context_get_option : context -> 'a option -> 'a = "caml_utp_context
 external utp_context_set_option : context -> 'a option -> 'a -> unit = "caml_utp_context_set_option"
 external utp_getpeername : socket -> Unix.inet_addr = "caml_utp_getpeername"
 
+let set_context_callback = utp_set_callback
+
 open Lwt.Infix
 
 let rec check_timeouts utp_ctx =
@@ -219,14 +221,6 @@ let connect sock addr =
   let info = utp_get_userdata sock in
   utp_connect sock addr;
   info.connecting
-
-let accept ctx =
-  assert false
-(* let accept ctx = *)
-(*   Lwt.add_task_l ctx.accepting >>= fun (sock, sa) -> *)
-(*   let info = create_info () in *)
-(*   utp_set_userdata sock info; *)
-(*   Lwt.return (sock, sa) *)
 
 let on_read sock buf =
   let info = utp_get_userdata sock in
@@ -288,11 +282,6 @@ let on_error sock err =
   (* | ECONNRESET -> *)
   (*     () (\* CHECK *\) *)
 
-let on_accept accepting sock addr =
-  match Lwt_sequence.take_opt_r accepting with
-  | None -> ()
-  | Some u -> Lwt.wakeup u (sock, addr)
-
 let on_state_change sock st =
   let info = utp_get_userdata sock in
   match st with
@@ -331,16 +320,14 @@ let set_context_opt ctx opt v =
 
 let context () =
   let fd = Lwt_unix.socket Lwt_unix.PF_INET Lwt_unix.SOCK_DGRAM 0 in
-  let utp_ctx = utp_init 2 in
-  let accepting = Lwt_sequence.create () in
+  let ctx = utp_init 2 in
 
-  utp_set_callback utp_ctx ON_READ on_read;
-  utp_set_callback utp_ctx ON_STATE_CHANGE on_state_change;
-  utp_set_callback utp_ctx ON_ERROR on_error;
-  utp_set_callback utp_ctx ON_SENDTO (on_sendto fd);
-  utp_set_callback utp_ctx ON_LOG on_log;
-  utp_set_callback utp_ctx ON_ACCEPT (on_accept accepting);
+  utp_set_callback ctx ON_READ on_read;
+  utp_set_callback ctx ON_STATE_CHANGE on_state_change;
+  utp_set_callback ctx ON_ERROR on_error;
+  utp_set_callback ctx ON_SENDTO (on_sendto fd);
+  utp_set_callback ctx ON_LOG on_log;
 
-  Lwt.ignore_result (check_timeouts utp_ctx);
-  Lwt.ignore_result (network_loop fd utp_ctx);
-  utp_ctx
+  Lwt.ignore_result (check_timeouts ctx);
+  Lwt.ignore_result (network_loop fd ctx);
+  ctx

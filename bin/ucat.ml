@@ -1,6 +1,6 @@
 (* The MIT License (MIT)
 
-   Copyright (c) 2015 Nicolas Ojeda Bar <n.oje.bar@gmail.com>
+   Copyright (c) 2015-2016 Nicolas Ojeda Bar <n.oje.bar@gmail.com>
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
@@ -159,8 +159,9 @@ let main () =
   | true ->
       let%lwt addr = lookup !o_local_address !o_local_port in
       Utp.bind ctx addr;
-      let rec loop id =
-        let%lwt sock, addr = Utp.accept ctx in
+      let id = ref (-1) in
+      let on_accept sock addr =
+        incr id;
         debug "Connection accepted from %s" (string_of_sockaddr addr);
         let buf = Bytes.create 4096 in
         let rec loop1 () =
@@ -168,14 +169,15 @@ let main () =
           | 0 ->
               Lwt.return_unit
           | n ->
-              debug "Received %d bytes from #%d" n id;
+              debug "Received %d bytes from #%d" n !id;
               let%lwt () = Lwt_io.write_from_exactly Lwt_io.stdout buf 0 n in
               loop1 ()
         in
         Lwt.async loop1;
-        loop (id+1)
       in
-      loop 0
+      Utp.set_context_callback ctx Utp.ON_ACCEPT on_accept;
+      let t, _ = Lwt.wait () in
+      t
 
 let () =
   try

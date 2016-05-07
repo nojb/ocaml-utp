@@ -23,6 +23,25 @@
 type context
 type socket
 
+type state =
+  | STATE_CONNECT
+  | STATE_WRITABLE
+  | STATE_EOF
+  | STATE_DESTROYING
+
+type error =
+  | ECONNREFUSED
+  | ECONNRESET
+  | ETIMEDOUT
+
+type _ utp_context_callback =
+  | ON_READ : (socket -> Lwt_bytes.t -> unit) utp_context_callback
+  | ON_STATE_CHANGE : (socket -> state -> unit) utp_context_callback
+  | ON_ERROR : (socket -> error -> unit) utp_context_callback
+  | ON_SENDTO : (context -> Unix.sockaddr -> Lwt_bytes.t -> unit) utp_context_callback
+  | ON_LOG : (socket -> string -> unit) utp_context_callback
+  | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) utp_context_callback
+
 type socket_stats =
   {
     nbytes_recv : int;
@@ -58,10 +77,11 @@ type _ option =
   | TARGET_DELAY : int option
 
 val context : unit -> context
+val set_context_callback: context -> 'a utp_context_callback -> 'a -> unit
+
 val socket : context -> socket
 val connect : socket -> Unix.sockaddr -> unit Lwt.t
 val bind : context -> Unix.sockaddr -> unit
-val accept : context -> (socket * Unix.sockaddr) Lwt.t
 val read : socket -> bytes -> int -> int -> int Lwt.t
 val write : socket -> bytes -> int -> int -> int Lwt.t
 val close : socket -> unit Lwt.t

@@ -6,5 +6,7 @@
 *.cmi
 *.cmo
 *.cmx
+*.cmt
+*.cmti
 ucat
 ucat.opt
