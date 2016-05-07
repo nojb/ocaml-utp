@@ -1,6 +1,6 @@
 (* The MIT License (MIT)
 
-   Copyright (c) 2015 Nicolas Ojeda Bar <n.oje.bar@gmail.com>
+   Copyright (c) 2015-2016 Nicolas Ojeda Bar <n.oje.bar@gmail.com>
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
@@ -35,7 +35,6 @@ type error =
   | ETIMEDOUT
 
 type _ context_callback =
-  (* | ON_STATE_CHANGE : (socket -> state -> unit) context_callback *)
   | ON_ERROR : (socket -> error -> unit) context_callback
   | ON_SENDTO : (context -> Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
   | ON_LOG : (socket -> string -> unit) context_callback

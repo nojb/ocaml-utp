@@ -38,7 +38,6 @@
 typedef struct {
   utp_context *context;
 
-  value on_state_change;
   value on_error;
   value on_sendto;
   value on_log;
@@ -269,18 +268,15 @@ CAMLprim value caml_utp_set_callback(value ctx, value cb, value fun)
 
   switch (Int_val(cb)) {
     case 0:
-      cbaddr = &(u->on_state_change);
-      break;
-    case 1:
       cbaddr = &(u->on_error);
       break;
-    case 2:
+    case 1:
       cbaddr = &(u->on_sendto);
       break;
-    case 3:
+    case 2:
       cbaddr = &(u->on_log);
       break;
-    case 4:
+    case 3:
       cbaddr = &(u->on_accept);
       break;
   }
