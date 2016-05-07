@@ -215,44 +215,6 @@ static uint64 callback_on_firewall(utp_callback_arguments *a)
   return 0;
 }
 
-CAMLprim value caml_utp_get_userdata(value sock)
-{
-  void *utp_info;
-
-  utp_info = utp_get_userdata((utp_socket *)sock);
-
-  if (!utp_info) {
-    caml_invalid_argument("utp_get_userdata");
-  }
-
-  return *(value *)utp_info;
-}
-
-CAMLprim value caml_utp_set_userdata(value sock, value info)
-{
-  value *utp_info;
-  utp_socket *utp_sock;
-
-  utp_sock = (utp_socket *)sock;
-  utp_info = utp_get_userdata(utp_sock);
-
-  if (utp_info) {
-    caml_modify_generational_global_root(utp_info, info);
-  } else {
-    utp_info = (value *)malloc(sizeof (value));
-
-    if (!utp_info) {
-      caml_raise_out_of_memory();
-    }
-
-    *utp_info = info;
-    caml_register_generational_global_root(utp_info);
-    utp_set_userdata(utp_sock, utp_info);
-  }
-
-  return Val_unit;
-}
-
 CAMLprim value caml_utp_close(value sock)
 {
   utp_close((utp_socket *)sock);
@@ -476,42 +438,6 @@ CAMLprim value caml_utp_get_context(value sock)
   }
 
   return (value)utp_get_context((utp_socket *)sock);
-}
-
-CAMLprim value caml_utp_context_get_userdata(value utp_ctx)
-{
-  void *ctx;
-
-  ctx = utp_context_get_userdata((utp_context *)utp_ctx);
-
-  if (!ctx) {
-    caml_invalid_argument("utp_context_get_userdata");
-  }
-
-  return *(value *)ctx;
-}
-
-CAMLprim value caml_utp_context_set_userdata(value utp_ctx, value ctx)
-{
-  value *old_ctx;
-
-  old_ctx = utp_context_get_userdata((utp_context *)utp_ctx);
-
-  if (old_ctx) {
-    caml_modify_generational_global_root(old_ctx, ctx);
-  } else {
-    old_ctx = (value *)malloc(sizeof (value));
-
-    if (!old_ctx) {
-      caml_raise_out_of_memory();
-    }
-
-    *old_ctx = ctx;
-    caml_register_generational_global_root(old_ctx);
-    utp_context_set_userdata((utp_context *)utp_ctx, old_ctx);
-  }
-
-  return Val_unit;
 }
 
 CAMLprim value caml_utp_get_context_stats(value ctx)
