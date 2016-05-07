@@ -174,13 +174,13 @@ let main () =
       let%lwt addr = lookup !o_local_address !o_local_port in
       Utp.bind ctx addr;
       let id = ref (-1) in
+      let on_read buf =
+        debug "Received %d bytes from #%d" (Lwt_bytes.length buf) !id;
+        Printf.eprintf "%s%!" (Lwt_bytes.to_string buf)
+      in
       let on_accept sock addr =
         incr id;
         debug "Connection accepted from %s" (string_of_sockaddr addr);
-        let on_read buf =
-          debug "Received %d bytes from #%d" (Lwt_bytes.length buf) !id
-          (* Lwt_io.write_from_exactly Lwt_io.stdout buf 0 n *)
-        in
         Utp.set_socket_callback sock Utp.ON_READ on_read
       in
       Utp.set_context_callback ctx Utp.ON_ACCEPT on_accept;

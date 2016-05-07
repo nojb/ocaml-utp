@@ -195,7 +195,7 @@ static uint64 callback_on_accept (utp_callback_arguments *a)
   u = utp_context_get_userdata (a->context);
 
   if (u->on_accept) {
-    caml_callback2(u->on_accept, (value) a->socket, addr);
+    caml_callback2 (u->on_accept, (value) a->socket, addr);
   }
 
   return 0;
