@@ -87,10 +87,10 @@ val set_context_callback: context -> 'a context_callback -> 'a -> unit
 val set_socket_callback : socket -> 'a callback -> 'a -> unit
 
 val socket : context -> socket
-val connect : socket -> Unix.sockaddr -> unit Lwt.t
+val connect : socket -> Unix.sockaddr -> unit
 val bind : context -> Unix.sockaddr -> unit
 val write : socket -> bytes -> int -> int -> int
-val close : socket -> unit Lwt.t
+val close : socket -> unit
 val get_stats : socket -> socket_stats
 val get_context_stats : context -> context_stats
 val get_opt : socket -> 'a option -> 'a

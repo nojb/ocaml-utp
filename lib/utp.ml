@@ -73,14 +73,6 @@ type context_stats =
     nraw_send_huge : int;
   }
 
-type socket_info =
-  {
-    connected : unit Lwt.u;
-    connecting : unit Lwt.t;
-    closing : unit Lwt.t;
-    closed : unit Lwt.u;
-  }
-
 type _ option =
   | LOG_NORMAL : bool option
   | LOG_MTU : bool option
@@ -94,15 +86,13 @@ external utp_set_callback : context -> 'a context_callback -> 'a -> unit = "caml
 external set_socket_callback : socket -> 'a callback -> 'a -> unit = "caml_socket_set_callback"
 external utp_destroy : context -> unit = "caml_utp_destroy"
 external socket : context -> socket = "caml_utp_create_socket"
-external utp_get_userdata : socket -> socket_info = "caml_utp_get_userdata"
-external utp_set_userdata : socket -> socket_info -> unit = "caml_utp_set_userdata"
 external write : socket -> bytes -> int -> int -> int = "caml_utp_write"
 external utp_issue_deferred_acks : context -> unit = "caml_utp_issue_deferred_acks"
 external utp_check_timeouts : context -> unit = "caml_utp_check_timeouts"
 external utp_process_udp : context -> Lwt_bytes.t -> int -> Unix.sockaddr -> bool = "caml_utp_process_udp"
-external utp_connect : socket -> Unix.sockaddr -> unit = "caml_utp_connect"
+external connect : socket -> Unix.sockaddr -> unit = "caml_utp_connect"
 external utp_check_timeouts : context -> unit = "caml_utp_check_timeouts"
-external utp_close : socket -> unit = "caml_utp_close"
+external close : socket -> unit = "caml_utp_close"
 external utp_get_stats : socket -> socket_stats = "caml_utp_get_stats"
 external utp_get_context : socket -> context = "caml_utp_get_context"
 external utp_context_get_userdata : context -> context = "caml_utp_context_get_userdata"
@@ -137,11 +127,6 @@ let bind ctx addr =
   assert false
   (* Lwt_unix.bind ctx.fd addr *)
 
-let connect sock addr =
-  let info = utp_get_userdata sock in
-  utp_connect sock addr;
-  info.connecting
-
 external sendto_bytes: Unix.file_descr -> Lwt_bytes.t -> int -> int -> Unix.sockaddr -> unit = "caml_sendto_bytes" "noalloc"
 
 let on_sendto fd utp_ctx addr buf =
@@ -152,29 +137,8 @@ let on_log _sock str =
   prerr_string "log: ";
   prerr_endline str
 
-let cancel_io info =
-  (* Q.iter (fun u -> Lwt.wakeup_exn u End_of_file) info.writers; *)
-  (* Q.clear info.writers; *)
-  Lwt.wakeup_exn info.connected End_of_file
-
-let on_error sock err =
-  let info = utp_get_userdata sock in
-  cancel_io info
-  (* info.got_error <- true *)
-  (* match err with *)
-  (* | ECONNREFUSED *)
-  (* | ETIMEDOUT -> *)
-  (*     Lwt.wakeup_exn info.connected (Failure "connection failed") *)
-  (* | ECONNRESET -> *)
-  (*     () (\* CHECK *\) *)
-
 let get_stats sock =
   utp_get_stats sock
-
-let close sock =
-  let info = utp_get_userdata sock in
-  utp_close sock;
-  info.closing
 
 let get_context_stats ctx =
   utp_get_context_stats ctx
@@ -195,7 +159,6 @@ let context () =
   let fd = Lwt_unix.socket Lwt_unix.PF_INET Lwt_unix.SOCK_DGRAM 0 in
   let ctx = utp_init 2 in
 
-  utp_set_callback ctx ON_ERROR on_error;
   utp_set_callback ctx ON_SENDTO (on_sendto fd);
   utp_set_callback ctx ON_LOG on_log;
 

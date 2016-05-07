@@ -134,30 +134,42 @@ let main () =
       let%lwt addr = lookup !o_remote_address !o_remote_port in
       debug "Connecting to %s..." (string_of_sockaddr addr);
       let sock = Utp.socket ctx in
-      let%lwt () = Utp.connect sock addr in
-      debug "Connected to %s" (string_of_sockaddr addr);
-      let writable = Lwt_condition.create () in
-      Utp.set_socket_callback sock Utp.ON_WRITABLE (Lwt_condition.signal writable);
-      let rec write sock buf off len =
-        if len = 0 then
-          Lwt.return_unit
-        else
-          let n = Utp.write sock buf off len in
-          if n = 0 then
-            Lwt_condition.wait writable >> write sock buf off len
+      let t, u = Lwt.wait () in
+      let read_loop () =
+        let writable = Lwt_condition.create () in
+        let closed = Lwt_condition.create () in
+        Utp.set_socket_callback sock Utp.ON_WRITABLE (Lwt_condition.signal writable);
+        Utp.set_socket_callback sock Utp.ON_CLOSE (Lwt_condition.signal closed);
+        let rec write sock buf off len =
+          if len = 0 then
+            Lwt.return_unit
           else
-            write sock buf (off + n) (len - n)
+            let n = Utp.write sock buf off len in
+            if n = 0 then
+              Lwt_condition.wait writable >> write sock buf off len
+            else
+              write sock buf (off + n) (len - n)
+        in
+        let rec loop () =
+          match%lwt Lwt_io.read_into Lwt_io.stdin buf 0 (Bytes.length buf) with
+          | 0 ->
+              debug "Read EOF from stdin; closing socket";
+              let t = Lwt_condition.wait closed in
+              Utp.close sock;
+              t
+          | len ->
+              debug "Read %d bytes from stdin" len;
+              write sock buf 0 len >> loop ()
+        in
+        loop ()
       in
-      let rec loop () =
-        match%lwt Lwt_io.read_into Lwt_io.stdin buf 0 (Bytes.length buf) with
-        | 0 ->
-            debug "Read EOF from stdin; closing socket";
-            Utp.close sock
-        | len ->
-            debug "Read %d bytes from stdin" len;
-            write sock buf 0 len >> loop ()
+      let on_connect () =
+        debug "Connected to %s" (string_of_sockaddr addr);
+        Lwt.wakeup u ();
       in
-      loop ()
+      Utp.set_socket_callback sock Utp.ON_CONNECT on_connect;
+      Utp.connect sock addr;
+      t >> read_loop ()
   | true ->
       let%lwt addr = lookup !o_local_address !o_local_port in
       Utp.bind ctx addr;
