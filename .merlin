@@ -1,3 +1,5 @@
-S lib bin
-B lib bin
+S lib
+S bin
+B lib
+B bin
 PKG lwt lwt.ppx

@@ -135,21 +135,26 @@ let main () =
       debug "Connecting to %s..." (string_of_sockaddr addr);
       let sock = Utp.socket ctx in
       let t, u = Lwt.wait () in
-      let read_loop () =
-        let writable = Lwt_condition.create () in
-        let closed = Lwt_condition.create () in
-        Utp.set_socket_callback sock Utp.ON_WRITABLE (Lwt_condition.signal writable);
-        Utp.set_socket_callback sock Utp.ON_CLOSE (Lwt_condition.signal closed);
-        let rec write sock buf off len =
-          if len = 0 then
-            Lwt.return_unit
+      let writable = Lwt_condition.create () in
+      let closed = Lwt_condition.create () in
+      Utp.set_socket_callback sock Utp.ON_WRITABLE (Lwt_condition.signal writable);
+      Utp.set_socket_callback sock Utp.ON_CLOSE (Lwt_condition.signal closed);
+      let on_connect () =
+        debug "Connected to %s" (string_of_sockaddr addr);
+        Lwt.wakeup u ();
+      in
+      Utp.set_socket_callback sock Utp.ON_CONNECT on_connect;
+      let rec write sock buf off len =
+        if len = 0 then
+          Lwt.return_unit
+        else
+          let n = Utp.write sock buf off len in
+          if n = 0 then
+            Lwt_condition.wait writable >> write sock buf off len
           else
-            let n = Utp.write sock buf off len in
-            if n = 0 then
-              Lwt_condition.wait writable >> write sock buf off len
-            else
-              write sock buf (off + n) (len - n)
-        in
+            write sock buf (off + n) (len - n)
+      in
+      let read_loop () =
         let rec loop () =
           match%lwt Lwt_io.read_into Lwt_io.stdin buf 0 (Bytes.length buf) with
           | 0 ->
@@ -163,11 +168,6 @@ let main () =
         in
         loop ()
       in
-      let on_connect () =
-        debug "Connected to %s" (string_of_sockaddr addr);
-        Lwt.wakeup u ();
-      in
-      Utp.set_socket_callback sock Utp.ON_CONNECT on_connect;
       Utp.connect sock addr;
       t >> read_loop ()
   | true ->
