@@ -23,16 +23,16 @@
 type context
 type socket
 
-type error =
-  | ECONNREFUSED
-  | ECONNRESET
-  | ETIMEDOUT
-
 type _ context_callback =
   | ON_ERROR : (unit -> unit) context_callback
   | ON_SENDTO : (context -> Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
   | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) context_callback
   | ON_MESSAGE : (Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
+
+type error =
+  | ECONNREFUSED
+  | ECONNRESET
+  | ETIMEDOUT
 
 type _ callback =
   | ON_ERROR : (error -> unit) callback
@@ -44,28 +44,28 @@ type _ callback =
 
 type socket_stats =
   {
-    nbytes_recv : int;
-    nbytes_xmit : int;
-    rexmit : int;
-    fastrexmit : int;
-    nxmit : int;
-    nrecv : int;
-    nduprecv : int;
-    mtu_guess : int;
+    nbytes_recv: int;
+    nbytes_xmit: int;
+    rexmit: int;
+    fastrexmit: int;
+    nxmit: int;
+    nrecv: int;
+    nduprecv: int;
+    mtu_guess: int;
   }
 
 type context_stats =
   {
-    nraw_recv_empty : int;
-    nraw_recv_small : int;
-    nraw_recv_mid : int;
-    nraw_recv_big : int;
-    nraw_recv_huge : int;
-    nraw_send_empty : int;
-    nraw_send_small : int;
-    nraw_send_mid : int;
-    nraw_send_big : int;
-    nraw_send_huge : int;
+    nraw_recv_empty: int;
+    nraw_recv_small: int;
+    nraw_recv_mid: int;
+    nraw_recv_big: int;
+    nraw_recv_huge: int;
+    nraw_send_empty: int;
+    nraw_send_small: int;
+    nraw_send_mid: int;
+    nraw_send_big: int;
+    nraw_send_huge: int;
   }
 
 type _ option =
@@ -76,18 +76,18 @@ type _ option =
   | RCVBUF : int option
   | TARGET_DELAY : int option
 
-val context : unit -> context
+val context: unit -> context
 val set_context_callback: context -> 'a context_callback -> 'a -> unit
-val set_socket_callback : socket -> 'a callback -> 'a -> unit
+val set_socket_callback: socket -> 'a callback -> 'a -> unit
 
-val socket : context -> socket
-val connect : socket -> Unix.sockaddr -> unit
-val bind : context -> Unix.sockaddr -> unit
-val write : socket -> bytes -> int -> int -> int
-val close : socket -> unit
-val get_stats : socket -> socket_stats
-val get_context_stats : context -> context_stats
-val get_opt : socket -> 'a option -> 'a
-val set_opt : socket -> 'a option -> 'a -> unit
-val get_context_opt : context -> 'a option -> 'a
-val set_context_opt : context -> 'a option -> 'a -> unit
+val socket: context -> socket
+val connect: socket -> Unix.sockaddr -> unit
+val bind: context -> Unix.sockaddr -> unit
+val write: socket -> bytes -> int -> int -> int
+val close: socket -> unit
+val get_stats: socket -> socket_stats
+val get_context_stats: context -> context_stats
+val get_opt: socket -> 'a option -> 'a
+val set_opt: socket -> 'a option -> 'a -> unit
+val get_context_opt: context -> 'a option -> 'a
+val set_context_opt: context -> 'a option -> 'a -> unit
