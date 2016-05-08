@@ -33,6 +33,7 @@
 #include <caml/callback.h>
 #include <caml/bigarray.h>
 #include <caml/fail.h>
+#include <caml/custom.h>
 #include <caml/socketaddr.h>
 #include <caml/unixsupport.h>
 
@@ -69,6 +70,46 @@ typedef struct {
   value on_eof;
   value on_close;
 } utp_userdata;
+
+static struct custom_operations utp_context_custom_ops = {
+ .identifier = "utp context",
+ .finalize = custom_finalize_default,
+ .compare = custom_compare_default,
+ .hash = custom_hash_default,
+ .serialize = custom_serialize_default,
+ .deserialize = custom_deserialize_default
+};
+
+#define Utp_context_val(v) (*(utp_context **) (Data_custom_val (v)))
+
+static value alloc_utp_context (utp_context *context)
+{
+    CAMLparam0();
+    CAMLlocal1(v);
+    v = caml_alloc_custom (&utp_context_custom_ops, sizeof (utp_context *), 0, 1);
+    Utp_context_val (v) = context;
+    CAMLreturn(v);
+}
+
+static struct custom_operations utp_socket_custom_ops = {
+ .identifier = "utp socket",
+ .finalize = custom_finalize_default,
+ .compare = custom_compare_default,
+ .hash = custom_hash_default,
+ .serialize = custom_serialize_default,
+ .deserialize = custom_deserialize_default
+};
+
+#define Utp_socket_val(v) (*(utp_socket **) (Data_custom_val (v)))
+
+static value alloc_utp_socket (utp_socket *socket)
+{
+    CAMLparam0();
+    CAMLlocal1(v);
+    v = caml_alloc_custom (&utp_socket_custom_ops, sizeof (utp_socket *), 0, 1);
+    Utp_socket_val (v) = socket;
+    CAMLreturn(v);
+}
 
 static uint64 on_read (utp_callback_arguments* a)
 {
