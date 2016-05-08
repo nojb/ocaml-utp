@@ -23,6 +23,9 @@
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
@@ -35,21 +38,31 @@
 
 #include "utp.h"
 
-#define UTP_DEBUG(msg) fprintf(stderr, "debug utp: %s\n", (const char *) msg)
+#define UTP_DEBUG(msg, ...) \
+  do { \
+    fprintf (stderr, "[UTP DEBUG] "); \
+    fprintf (stderr, (msg), ##__VA_ARGS__); \
+    fprintf (stderr, "\n"); \
+  } while (0);
+
+#define UTP_BUFFER_SIZE 65536
 
 typedef struct {
   utp_context *context;
   int fd;
   int sockets;
+  void *buffer;
 
   value on_error;
   value on_sendto;
   value on_accept;
+  value on_message;
 } utp_context_userdata;
 
 typedef struct {
   utp_socket *socket;
 
+  value on_error;
   value on_read;
   value on_connect;
   value on_writable;
@@ -62,10 +75,6 @@ static uint64 on_read (utp_callback_arguments* a)
   utp_userdata *u;
 
   value ba = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
-
-  if (!ba) {
-    caml_raise_out_of_memory ();
-  }
 
   u = utp_get_userdata (a->socket);
 
@@ -102,7 +111,7 @@ static uint64 on_state_change (utp_callback_arguments *a)
       cb = u->on_close;
       break;
     default:
-      UTP_DEBUG("unknown state change");
+      UTP_DEBUG ("unknown state change");
       break;
   }
 
@@ -115,7 +124,7 @@ static uint64 on_state_change (utp_callback_arguments *a)
 
 static uint64 on_error (utp_callback_arguments *a)
 {
-  utp_context_userdata *u;
+  utp_userdata *u;
   int i;
 
   switch (a->error_code) {
@@ -130,10 +139,10 @@ static uint64 on_error (utp_callback_arguments *a)
       break;
   }
 
-  u = utp_context_get_userdata (a->context);
+  u = utp_get_userdata (a->socket);
 
   if (u->on_error) {
-    caml_callback2(u->on_error, (value) a->socket, Val_int(i));
+    caml_callback(u->on_error, Val_int(i));
   }
 
   return 0;
@@ -146,22 +155,13 @@ static uint64 on_sendto (utp_callback_arguments *a)
 
   union sock_addr_union sock_addr;
   socklen_param_type sock_addr_len;
+  utp_context_userdata *u;
 
   sock_addr_len = sizeof (struct sockaddr_in);
   memcpy (&sock_addr.s_inet, (struct sockaddr_in *) a->address, sock_addr_len);
   addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
-
-  if (!addr) {
-    caml_raise_out_of_memory();
-  }
-
   buf = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
-
-  if (!buf) {
-    caml_raise_out_of_memory ();
-  }
-
-  utp_context_userdata *u = utp_context_get_userdata (a->context);
+  u = utp_context_get_userdata (a->context);
 
   if (u->on_sendto) {
     caml_callback3 (u->on_sendto, (value) a->context, addr, buf);
@@ -172,7 +172,7 @@ static uint64 on_sendto (utp_callback_arguments *a)
 
 static uint64 on_log (utp_callback_arguments *a)
 {
-  UTP_DEBUG(a->buf);
+  UTP_DEBUG ("%s", a->buf);
   return 0;
 }
 
@@ -234,6 +234,9 @@ CAMLprim value caml_utp_set_callback (value ctx, value cbnum, value fun)
     case 2:
       cb = &(u->on_accept);
       break;
+    case 3:
+      cb = &(u->on_message);
+      break;
   }
 
   if (*cb) {
@@ -255,18 +258,21 @@ CAMLprim value caml_socket_set_callback (value sock, value cbnum, value fun)
 
   switch (Int_val(cbnum)) {
     case 0:
-      cb = &(u->on_read);
+      cb = &(u->on_error);
       break;
     case 1:
-      cb = &(u->on_connect);
+      cb = &(u->on_read);
       break;
     case 2:
-      cb = &(u->on_writable);
+      cb = &(u->on_connect);
       break;
     case 3:
-      cb = &(u->on_eof);
+      cb = &(u->on_writable);
       break;
     case 4:
+      cb = &(u->on_eof);
+      break;
+    case 5:
       cb = &(u->on_close);
       break;
   }
@@ -292,6 +298,10 @@ CAMLprim value caml_utp_init(value version)
   u->sockets = 0;
   u->context = context;
   u->fd = socket (PF_INET, SOCK_DGRAM, 0);
+  u->buffer = malloc (UTP_BUFFER_SIZE);
+
+  fcntl (u->fd, F_SETFL, O_NONBLOCK, 1);
+
   utp_context_set_userdata (context, u);
 
   utp_set_callback (context, UTP_ON_READ, on_read);
@@ -315,6 +325,59 @@ CAMLprim value caml_utp_file_descr (value ctx)
   CAMLreturn(Val_int(u->fd));
 }
 
+CAMLprim value caml_utp_readable (value context)
+{
+  CAMLparam1(context);
+  CAMLlocal2(buf, sa);
+  union sock_addr_union addr;
+  socklen_param_type addr_len;
+  utp_context_userdata *u;
+  ssize_t nread;
+  bool handled;
+
+  addr_len = sizeof (struct sockaddr_in);
+  u = utp_context_get_userdata ((utp_context *) context);
+
+  while (1) {
+    nread = recvfrom(u->fd, u->buffer, UTP_BUFFER_SIZE, 0, &addr.s_gen, &addr_len);
+
+    if (nread < 0) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+          nread = 0;
+      } else {
+        UTP_DEBUG ("context error");
+        if (u->on_error) {
+          caml_callback (u->on_error, Val_unit);
+        }
+        break;
+      }
+    }
+
+    if (nread == 0) {
+      /* UTP_DEBUG ("issuing deferred acks"); */
+      utp_issue_deferred_acks ((utp_context *) context);
+      break;
+    }
+
+    handled = utp_process_udp ((utp_context *) context, u->buffer, nread, &addr.s_gen, addr_len);
+
+    if (!handled && u->on_message) {
+      UTP_DEBUG ("not a utp message");
+      sa = alloc_sockaddr (&addr, addr_len, 0);
+      buf = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, u->buffer, nread);
+      caml_callback2 (u->on_message, sa, buf);
+    }
+  }
+
+  CAMLreturn(Val_unit);
+}
+
+CAMLprim value caml_utp_periodic (value context)
+{
+  utp_check_timeouts ((utp_context *) context);
+  return Val_unit;
+}
+
 CAMLprim value caml_utp_bind (value ctx, value sa)
 {
   CAMLparam2(ctx, sa);
@@ -324,37 +387,18 @@ CAMLprim value caml_utp_bind (value ctx, value sa)
 
   u = utp_context_get_userdata ((utp_context *) ctx);
 
-  get_sockaddr(sa, &addr, &addr_len);
+  get_sockaddr (sa, &addr, &addr_len);
 
   bind (u->fd, &addr.s_gen, addr_len);
 
   CAMLreturn(Val_unit);
 }
 
-CAMLprim value caml_utp_destroy(value ctx)
+CAMLprim value caml_utp_destroy (value ctx)
 {
-  utp_destroy((utp_context *)ctx);
+  utp_destroy ((utp_context *) ctx);
 
   return Val_unit;
-}
-
-CAMLprim value caml_utp_issue_deferred_acks(value ctx)
-{
-  utp_issue_deferred_acks((utp_context *)ctx);
-
-  return Val_unit;
-}
-
-CAMLprim value caml_utp_process_udp (value ctx, value buf, value len, value sa)
-{
-  union sock_addr_union addr;
-  socklen_param_type addr_len;
-  int handled;
-
-  get_sockaddr(sa, &addr, &addr_len);
-  handled = utp_process_udp ((utp_context *) ctx, Caml_ba_data_val(buf), Int_val(len), &addr.s_gen, addr_len);
-
-  return Val_bool(handled);
 }
 
 CAMLprim value caml_utp_create_socket (value ctx)
@@ -467,10 +511,6 @@ CAMLprim value caml_utp_get_context_stats(value ctx)
 
   stats = caml_alloc(10, 0);
 
-  if (!stats) {
-    caml_raise_out_of_memory();
-  }
-
   Store_field(stats, 0, Val_int(utp_stats->_nraw_recv[0]));
   Store_field(stats, 1, Val_int(utp_stats->_nraw_recv[1]));
   Store_field(stats, 2, Val_int(utp_stats->_nraw_recv[2]));
@@ -485,10 +525,11 @@ CAMLprim value caml_utp_get_context_stats(value ctx)
   return stats;
 }
 
-CAMLprim value caml_utp_getsockopt(value sock, value opt)
+CAMLprim value caml_utp_getsockopt(value socket, value opt)
 {
   int utp_opt;
   int val;
+  value ret;
 
   switch (Int_val(opt)) {
     case 0:
@@ -513,20 +554,25 @@ CAMLprim value caml_utp_getsockopt(value sock, value opt)
       caml_invalid_argument("caml_utp_getsockopt");
   }
 
-  val = utp_getsockopt((utp_socket *)sock, utp_opt);
+  val = utp_getsockopt ((utp_socket *) socket, utp_opt);
 
   switch (utp_opt) {
     case UTP_LOG_NORMAL:
     case UTP_LOG_MTU:
     case UTP_LOG_DEBUG:
-      return Val_bool(val);
+      ret = Val_bool(val);
+      break;
     case UTP_SNDBUF:
     case UTP_RCVBUF:
     case UTP_TARGET_DELAY:
-      return Val_int(val);
+      ret = Val_int(val);
+      break;
     default:
       caml_invalid_argument("utp_get_sockopt");
+      break;
   }
+
+  return ret;
 }
 
 CAMLprim value caml_utp_setsockopt(value sock, value opt, value val)
@@ -590,10 +636,10 @@ CAMLprim value caml_utp_context_get_option(value ctx, value opt)
       caml_invalid_argument("caml_utp_context_get_option");
   }
 
-  val = utp_context_get_option((utp_context *)ctx, utp_opt);
+  val = utp_context_get_option ((utp_context *) ctx, utp_opt);
 
   if (val < 0) {
-    caml_failwith("utp_context_get_option");
+    caml_failwith ("utp stubs: utp_context_get_option");
   }
 
   switch (utp_opt) {
@@ -639,13 +685,14 @@ CAMLprim value caml_utp_context_set_option(value ctx, value opt, value val)
       utp_opt = UTP_TARGET_DELAY;
       break;
     default:
-      caml_invalid_argument("caml_utp_context_set_option");
+      caml_invalid_argument ("utp_stubs: caml_utp_context_set_option");
+      break;
   }
 
-  res = utp_context_set_option((utp_context *)ctx, utp_opt, Int_val(val));
+  res = utp_context_set_option ((utp_context *) ctx, utp_opt, Int_val(val));
 
   if (res < 0) {
-    caml_failwith("utp_context_set_option");
+    caml_failwith ("utp stubs: caml_utp_context_set_option");
   }
 
   return Val_unit;

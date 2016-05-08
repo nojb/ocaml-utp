@@ -29,11 +29,13 @@ type error =
   | ETIMEDOUT
 
 type _ context_callback =
-  | ON_ERROR : (socket -> error -> unit) context_callback
+  | ON_ERROR : (unit -> unit) context_callback
   | ON_SENDTO : (context -> Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
   | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) context_callback
+  | ON_MESSAGE : (Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
 
 type _ callback =
+  | ON_ERROR : (error -> unit) callback
   | ON_READ : (Lwt_bytes.t -> unit) callback
   | ON_CONNECT : (unit -> unit) callback
   | ON_WRITABLE : (unit -> unit) callback
@@ -80,9 +82,7 @@ external set_socket_callback : socket -> 'a callback -> 'a -> unit = "caml_socke
 external utp_destroy : context -> unit = "caml_utp_destroy"
 external socket : context -> socket = "caml_utp_create_socket"
 external write : socket -> bytes -> int -> int -> int = "caml_utp_write"
-external utp_issue_deferred_acks : context -> unit = "caml_utp_issue_deferred_acks"
 external utp_check_timeouts : context -> unit = "caml_utp_check_timeouts"
-external utp_process_udp : context -> Lwt_bytes.t -> int -> Unix.sockaddr -> bool = "caml_utp_process_udp"
 external connect : socket -> Unix.sockaddr -> unit = "caml_utp_connect"
 external utp_check_timeouts : context -> unit = "caml_utp_check_timeouts"
 external close : socket -> unit = "caml_utp_close"
@@ -96,6 +96,7 @@ external set_context_opt: context -> 'a option -> 'a -> unit = "caml_utp_context
 external utp_getpeername : socket -> Unix.inet_addr = "caml_utp_getpeername"
 external utp_file_descr: context -> Unix.file_descr = "caml_utp_file_descr"
 external bind: context -> Unix.sockaddr -> unit = "caml_utp_bind"
+external readable: context -> unit = "caml_utp_readable"
 
 let rec check_timeouts utp_ctx =
   let open Lwt.Infix in
@@ -106,11 +107,9 @@ let rec check_timeouts utp_ctx =
 let network_loop ctx =
   let open Lwt.Infix in
   let fd = Lwt_unix.of_unix_file_descr (utp_file_descr ctx) in
-  let socket_data = Lwt_bytes.create 4096 in
   let rec loop () =
-    Lwt_bytes.recvfrom fd socket_data 0 4096 [] >>= fun (n, sa) ->
-    let _ : bool = utp_process_udp ctx socket_data n sa in
-    if not (Lwt_unix.readable fd) then utp_issue_deferred_acks ctx;
+    Lwt_unix.wait_read fd >>= fun () ->
+    readable ctx;
     loop ()
   in
   loop ()

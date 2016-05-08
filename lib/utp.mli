@@ -29,11 +29,13 @@ type error =
   | ETIMEDOUT
 
 type _ context_callback =
-  | ON_ERROR : (socket -> error -> unit) context_callback
+  | ON_ERROR : (unit -> unit) context_callback
   | ON_SENDTO : (context -> Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
   | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) context_callback
+  | ON_MESSAGE : (Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
 
 type _ callback =
+  | ON_ERROR : (error -> unit) callback
   | ON_READ : (Lwt_bytes.t -> unit) callback
   | ON_CONNECT : (unit -> unit) callback
   | ON_WRITABLE : (unit -> unit) callback
