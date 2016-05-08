@@ -53,7 +53,6 @@ typedef struct {
   int fd;
   int sockets;
   void *buffer;
-
   value on_error;
   value on_sendto;
   value on_accept;
@@ -62,7 +61,6 @@ typedef struct {
 
 typedef struct {
   utp_socket *socket;
-
   value on_error;
   value on_read;
   value on_connect;
@@ -72,12 +70,12 @@ typedef struct {
 } utp_userdata;
 
 static struct custom_operations utp_context_custom_ops = {
- .identifier = "utp context",
- .finalize = custom_finalize_default,
- .compare = custom_compare_default,
- .hash = custom_hash_default,
- .serialize = custom_serialize_default,
- .deserialize = custom_deserialize_default
+  .identifier = "utp context",
+  .finalize = custom_finalize_default,
+  .compare = custom_compare_default,
+  .hash = custom_hash_default,
+  .serialize = custom_serialize_default,
+  .deserialize = custom_deserialize_default
 };
 
 #define Utp_context_val(v) (*(utp_context **) (Data_custom_val (v)))
@@ -92,12 +90,12 @@ static value alloc_utp_context (utp_context *context)
 }
 
 static struct custom_operations utp_socket_custom_ops = {
- .identifier = "utp socket",
- .finalize = custom_finalize_default,
- .compare = custom_compare_default,
- .hash = custom_hash_default,
- .serialize = custom_serialize_default,
- .deserialize = custom_deserialize_default
+  .identifier = "utp socket",
+  .finalize = custom_finalize_default,
+  .compare = custom_compare_default,
+  .hash = custom_hash_default,
+  .serialize = custom_serialize_default,
+  .deserialize = custom_deserialize_default
 };
 
 #define Utp_socket_val(v) (*(utp_socket **) (Data_custom_val (v)))
@@ -219,11 +217,12 @@ static uint64 on_log (utp_callback_arguments *a)
 
 static uint64 on_accept (utp_callback_arguments *a)
 {
+  CAMLparam0 ();
+  CAMLlocal2 (addr, val);
   utp_context_userdata *u;
   utp_userdata *su;
   union sock_addr_union sock_addr;
   socklen_param_type sock_addr_len;
-  value addr;
 
   sock_addr_len = sizeof (struct sockaddr_in);
   memcpy (&sock_addr.s_inet, (struct sockaddr_in *) a->address, sock_addr_len);
@@ -241,10 +240,11 @@ static uint64 on_accept (utp_callback_arguments *a)
 
   if (u->on_accept) {
     u->sockets ++;
-    caml_callback2 (u->on_accept, (value) a->socket, addr);
+    val = alloc_utp_socket (a->socket);
+    caml_callback2 (u->on_accept, val, addr);
   }
 
-  return 0;
+  CAMLreturn (0);
 }
 
 static uint64 on_firewall (utp_callback_arguments *a)
@@ -252,18 +252,19 @@ static uint64 on_firewall (utp_callback_arguments *a)
   return 0;
 }
 
-CAMLprim value caml_utp_close (value sock)
+CAMLprim value caml_utp_close (value socket)
 {
-  utp_close ((utp_socket *) sock);
+  utp_close (Utp_socket_val (socket));
   return Val_unit;
 }
 
 CAMLprim value caml_utp_set_callback (value ctx, value cbnum, value fun)
 {
   CAMLparam3(ctx, cbnum, fun);
-
-  utp_context_userdata *u = utp_context_get_userdata ((utp_context *) ctx);
+  utp_context_userdata *u;
   value *cb;
+
+  u = utp_context_get_userdata (Utp_context_val (ctx));
 
   switch (Int_val(cbnum)) {
     case 0:
@@ -293,9 +294,10 @@ CAMLprim value caml_utp_set_callback (value ctx, value cbnum, value fun)
 CAMLprim value caml_socket_set_callback (value sock, value cbnum, value fun)
 {
   CAMLparam3(sock, cbnum, fun);
-
-  utp_userdata *u = utp_get_userdata ((utp_socket *) sock);
+  utp_userdata *u;
   value *cb;
+
+  u = utp_get_userdata (Utp_socket_val (sock));
 
   switch (Int_val(cbnum)) {
     case 0:
@@ -330,6 +332,8 @@ CAMLprim value caml_socket_set_callback (value sock, value cbnum, value fun)
 
 CAMLprim value caml_utp_init(value version)
 {
+  CAMLparam1(version);
+  CAMLlocal1(val);
   utp_context *context;
   utp_context_userdata *u;
 
@@ -359,7 +363,9 @@ CAMLprim value caml_utp_init(value version)
   utp_set_callback (context, UTP_ON_ACCEPT, on_accept);
   utp_set_callback (context, UTP_ON_FIREWALL, on_firewall);
 
-  return (value) context;
+  val = alloc_utp_context (context);
+
+  CAMLreturn (val);
 }
 
 CAMLprim value caml_utp_file_descr (value ctx)
@@ -367,7 +373,7 @@ CAMLprim value caml_utp_file_descr (value ctx)
   CAMLparam1(ctx);
   utp_context_userdata *u;
 
-  u = utp_context_get_userdata ((utp_context *) ctx);
+  u = utp_context_get_userdata (Utp_context_val (ctx));
 
   CAMLreturn (Val_int (u->fd));
 }
@@ -383,7 +389,7 @@ CAMLprim value caml_utp_readable (value context)
   bool handled;
 
   addr_len = sizeof (struct sockaddr_in);
-  u = utp_context_get_userdata ((utp_context *) context);
+  u = utp_context_get_userdata (Utp_context_val (context));
 
   while (1) {
     nread = recvfrom(u->fd, u->buffer, UTP_BUFFER_SIZE, 0, &addr.s_gen, &addr_len);
@@ -402,11 +408,11 @@ CAMLprim value caml_utp_readable (value context)
 
     if (nread == 0) {
       /* UTP_DEBUG ("issuing deferred acks"); */
-      utp_issue_deferred_acks ((utp_context *) context);
+      utp_issue_deferred_acks (Utp_context_val (context));
       break;
     }
 
-    handled = utp_process_udp ((utp_context *) context, u->buffer, nread, &addr.s_gen, addr_len);
+    handled = utp_process_udp (Utp_context_val (context), u->buffer, nread, &addr.s_gen, addr_len);
 
     if (!handled && u->on_message) {
       UTP_DEBUG ("not a utp message");
@@ -421,7 +427,7 @@ CAMLprim value caml_utp_readable (value context)
 
 CAMLprim value caml_utp_periodic (value context)
 {
-  utp_check_timeouts ((utp_context *) context);
+  utp_check_timeouts (Utp_context_val (context));
   return Val_unit;
 }
 
@@ -432,7 +438,7 @@ CAMLprim value caml_utp_bind (value ctx, value sa)
   socklen_param_type addr_len;
   utp_context_userdata *u;
 
-  u = utp_context_get_userdata ((utp_context *) ctx);
+  u = utp_context_get_userdata (Utp_context_val (ctx));
 
   get_sockaddr (sa, &addr, &addr_len);
 
@@ -443,17 +449,18 @@ CAMLprim value caml_utp_bind (value ctx, value sa)
 
 CAMLprim value caml_utp_destroy (value ctx)
 {
-  utp_destroy ((utp_context *) ctx);
-
+  utp_destroy (Utp_context_val (ctx));
   return Val_unit;
 }
 
 CAMLprim value caml_utp_create_socket (value ctx)
 {
+  CAMLparam1 (ctx);
+  CAMLlocal1 (val);
   utp_socket *socket;
   utp_userdata *u;
 
-  socket = utp_create_socket ((utp_context *) ctx);
+  socket = utp_create_socket (Utp_context_val (ctx));
 
   if (!socket) {
     caml_failwith ("caml_utp_create_socket: utp_create_socket");
@@ -468,7 +475,9 @@ CAMLprim value caml_utp_create_socket (value ctx)
   u->socket = socket;
   utp_set_userdata (socket, u);
 
-  return (value) socket;
+  val = alloc_utp_socket (socket);
+
+  CAMLreturn (val);
 }
 
 CAMLprim value caml_utp_connect (value sock, value addr)
@@ -479,7 +488,7 @@ CAMLprim value caml_utp_connect (value sock, value addr)
 
   get_sockaddr (addr, &sock_addr, &addr_len);
 
-  res = utp_connect ((utp_socket *) sock, &sock_addr.s_gen, addr_len);
+  res = utp_connect (Utp_socket_val (sock), &sock_addr.s_gen, addr_len);
 
   if (res < 0) {
     caml_failwith ("caml_utp_connect: utp_connect");
@@ -494,7 +503,7 @@ CAMLprim value caml_utp_write (value socket, value buf, value off, value len)
 
   ssize_t written;
 
-  written = utp_write ((utp_socket *) socket, String_val(buf) + Int_val(off), Int_val(len));
+  written = utp_write (Utp_socket_val (socket), String_val(buf) + Int_val(off), Int_val(len));
 
   if (written < 0) {
     caml_failwith ("caml_utp_write: utp_write");
@@ -505,7 +514,7 @@ CAMLprim value caml_utp_write (value socket, value buf, value off, value len)
 
 CAMLprim value caml_utp_set_debug (value context, value v)
 {
-  utp_context_set_option ((utp_context *) context, UTP_LOG_DEBUG, Bool_val (v));
+  utp_context_set_option (Utp_context_val (context), UTP_LOG_DEBUG, Bool_val (v));
   return Val_unit;
 }
 
@@ -516,7 +525,7 @@ CAMLprim value caml_utp_getpeername (value sock)
   socklen_param_type sock_addr_len;
   value addr;
 
-  res = utp_getpeername ((utp_socket *) sock, &sock_addr.s_gen, &sock_addr_len);
+  res = utp_getpeername (Utp_socket_val (sock), &sock_addr.s_gen, &sock_addr_len);
 
   if (res < 0) {
     caml_failwith ("caml_utp_getpeername: utp_getpeername");
