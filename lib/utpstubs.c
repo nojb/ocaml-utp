@@ -300,7 +300,7 @@ CAMLprim value caml_utp_init(value version)
   u->fd = socket (PF_INET, SOCK_DGRAM, 0);
   u->buffer = malloc (UTP_BUFFER_SIZE);
 
-  if (u->buffer) {
+  if (!(u->buffer)) {
     caml_failwith ("caml_utp_init: malloc");
   }
 

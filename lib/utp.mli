@@ -45,7 +45,7 @@ type _ callback =
 val context: unit -> context
 val set_context_callback: context -> 'a context_callback -> 'a -> unit
 val set_socket_callback: socket -> 'a callback -> 'a -> unit
-
+val file_descr: context -> Unix.file_descr
 val set_debug: context -> bool -> unit
 
 val socket: context -> socket

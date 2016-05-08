@@ -12,10 +12,10 @@ $(LIBUTP_DIR)libutp.a:
 	$(MAKE) -C $(LIBUTP_DIR) libutp.a
 
 $(LIB_DIR)utp.cma: $(LIB_DIR)utp.cmo $(LIB_DIR)libutpstubs.a $(LIBUTP_DIR)libutp.a
-	$(OCAMLFIND) ocamlc -bin-annot -package lwt.unix -a -o $@ -custom $< -cclib -lutpstubs -cclib -lutp -cclib -lstdc++
+	$(OCAMLFIND) ocamlc -bin-annot -a -o $@ -custom $< -cclib -lutpstubs -cclib -lutp -cclib -lstdc++
 
 $(LIB_DIR)utp.cmxa: $(LIB_DIR)utp.cmx $(LIB_DIR)libutpstubs.a $(LIBUTP_DIR)libutp.a
-	$(OCAMLFIND) ocamlopt -bin-annot -package lwt.unix -a -o $@ $< -cclib -lutpstubs -cclib -lutp -cclib -lstdc++
+	$(OCAMLFIND) ocamlopt -bin-annot -a -o $@ $< -cclib -lutpstubs -cclib -lutp -cclib -lstdc++
 
 $(LIB_DIR)utp.cmo: $(LIB_DIR)utp.mli $(LIB_DIR)utp.ml
 	$(OCAMLFIND) ocamlc -bin-annot -package lwt.unix -o $@ -c -I $(LIB_DIR) $^

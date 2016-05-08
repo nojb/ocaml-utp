@@ -52,39 +52,10 @@ external write: socket -> bytes -> int -> int -> int = "caml_utp_write"
 external connect: socket -> Unix.sockaddr -> unit = "caml_utp_connect"
 external close: socket -> unit = "caml_utp_close"
 external utp_getpeername: socket -> Unix.inet_addr = "caml_utp_getpeername"
-external utp_file_descr: context -> Unix.file_descr = "caml_utp_file_descr"
+external file_descr: context -> Unix.file_descr = "caml_utp_file_descr"
 external bind: context -> Unix.sockaddr -> unit = "caml_utp_bind"
 external readable: context -> unit = "caml_utp_readable"
 external periodic: context -> unit = "caml_utp_periodic"
 
-let rec check_timeouts ctx =
-  let open Lwt.Infix in
-  Lwt_unix.sleep 0.5 >>= fun () ->
-  periodic ctx;
-  check_timeouts ctx
-
-let network_loop ctx =
-  let open Lwt.Infix in
-  let fd = Lwt_unix.of_unix_file_descr (utp_file_descr ctx) in
-  let rec loop () =
-    Lwt_unix.wait_read fd >>= fun () ->
-    readable ctx;
-    loop ()
-  in
-  loop ()
-
-external sendto_bytes: Unix.file_descr -> Lwt_bytes.t -> int -> int -> Unix.sockaddr -> unit = "caml_sendto_bytes" "noalloc"
-
-let on_sendto ctx addr buf =
-  let fd = Lwt_unix.of_unix_file_descr (utp_file_descr ctx) in
-  Lwt_unix.check_descriptor fd;
-  sendto_bytes (Lwt_unix.unix_file_descr fd) buf 0 (Lwt_bytes.length buf) addr
-
 let context () =
-  let ctx = utp_init 2 in
-
-  set_context_callback ctx ON_SENDTO on_sendto;
-
-  Lwt.ignore_result (check_timeouts ctx);
-  Lwt.ignore_result (network_loop ctx);
-  ctx
+  utp_init 2

@@ -99,10 +99,36 @@ let main () =
     raise Exit;
 
   let ctx = Utp.context () in
+  let fd = Lwt_unix.of_unix_file_descr (Utp.file_descr ctx) in
 
   if !o_debug >= 2 then begin
     Utp.set_debug ctx true
   end;
+
+  let rec read_loop () =
+    let%lwt () = Lwt_unix.wait_read fd in
+    Utp.readable ctx;
+    read_loop ()
+  in
+
+  let rec periodic_loop () =
+    let%lwt () = Lwt_unix.sleep 0.5 in
+    Utp.periodic ctx;
+    periodic_loop ()
+  in
+
+  let _event_loop = Lwt.join [read_loop (); periodic_loop ()] in
+
+  let on_send ctx addr buf =
+    (* Lwt_unix.check_descriptor fd; *)
+    let len = Lwt_bytes.length buf in
+    let cpy = Bytes.create len in
+    Lwt_bytes.blit_to_bytes buf 0 cpy 0 len;
+    let _ = Lwt_unix.sendto fd cpy 0 len [] addr in
+    ()
+  in
+
+  Utp.set_context_callback ctx Utp.ON_SENDTO on_send;
 
   match !o_listen with
   | false ->
@@ -139,7 +165,6 @@ let main () =
               t
           | line ->
               let line = line ^ "\n" in
-              debug "Read %d bytes from stdin" (String.length line);
               write sock line 0 (String.length line) >> loop ()
         in
         loop ()
