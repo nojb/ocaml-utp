@@ -462,12 +462,6 @@ CAMLprim value caml_utp_write (value socket, value buf, value off, value len)
   CAMLreturn (Val_int (written));
 }
 
-CAMLprim value caml_utp_check_timeouts (value ctx)
-{
-  utp_check_timeouts ((utp_context *) ctx);
-  return Val_unit;
-}
-
 CAMLprim value caml_utp_set_debug (value context, value v)
 {
   utp_context_set_option ((utp_context *) context, UTP_LOG_DEBUG, Bool_val (v));
