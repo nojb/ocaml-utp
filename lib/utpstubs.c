@@ -53,7 +53,6 @@ typedef struct {
   int fd;
   int sockets;
   void *buffer;
-  value val;
   value on_error;
   value on_sendto;
   value on_accept;
