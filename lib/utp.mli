@@ -42,27 +42,17 @@ type _ callback =
   | ON_EOF : (unit -> unit) callback
   | ON_CLOSE : (unit -> unit) callback
 
-type _ option =
-  | LOG_NORMAL : bool option
-  | LOG_MTU : bool option
-  | LOG_DEBUG : bool option
-  | SNDBUF : int option
-  | RCVBUF : int option
-  | TARGET_DELAY : int option
-
 val context: unit -> context
 val set_context_callback: context -> 'a context_callback -> 'a -> unit
 val set_socket_callback: socket -> 'a callback -> 'a -> unit
+
+val set_debug: context -> bool -> unit
 
 val socket: context -> socket
 val connect: socket -> Unix.sockaddr -> unit
 val bind: context -> Unix.sockaddr -> unit
 val write: socket -> bytes -> int -> int -> int
 val close: socket -> unit
-val get_opt: socket -> 'a option -> 'a
-val set_opt: socket -> 'a option -> 'a -> unit
-val get_context_opt: context -> 'a option -> 'a
-val set_context_opt: context -> 'a option -> 'a -> unit
 
 val readable: context -> unit
 val periodic: context -> unit
