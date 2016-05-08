@@ -25,7 +25,7 @@ type socket
 
 type _ context_callback =
   | ON_ERROR : (unit -> unit) context_callback
-  | ON_SENDTO : (context -> Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
+  | ON_SENDTO : (Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
   | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) context_callback
   | ON_MESSAGE : (Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
 

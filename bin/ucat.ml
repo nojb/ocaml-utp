@@ -120,7 +120,7 @@ let main () =
 
   let send_mutex = Lwt_mutex.create () in
 
-  let on_send ctx addr buf =
+  let on_send addr buf =
     (* Lwt_unix.check_descriptor fd; *)
     let buf = Lwt_bytes.to_bytes buf in
     let _ =

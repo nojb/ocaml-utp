@@ -53,6 +53,7 @@ typedef struct {
   int fd;
   int sockets;
   void *buffer;
+  value val;
   value on_error;
   value on_sendto;
   value on_accept;
@@ -113,10 +114,12 @@ static value alloc_utp_socket (utp_socket *socket)
 
 static uint64 on_read (utp_callback_arguments* a)
 {
+  CAMLparam0 ();
+  CAMLlocal1 (ba);
+
   utp_userdata *u;
 
-  value ba = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
-
+  ba = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
   u = utp_get_userdata (a->socket);
 
   if (u->on_read) {
@@ -125,7 +128,7 @@ static uint64 on_read (utp_callback_arguments* a)
 
   utp_read_drained (a->socket);
 
-  return 0;
+  CAMLreturn (0);
 }
 
 static uint64 on_state_change (utp_callback_arguments *a)
@@ -191,8 +194,8 @@ static uint64 on_error (utp_callback_arguments *a)
 
 static uint64 on_sendto (utp_callback_arguments *a)
 {
-  CAMLparam0();
-  CAMLlocal2(addr, buf);
+  CAMLparam0 ();
+  CAMLlocal2 (addr, buf);
 
   union sock_addr_union sock_addr;
   socklen_param_type sock_addr_len;
@@ -205,10 +208,10 @@ static uint64 on_sendto (utp_callback_arguments *a)
   u = utp_context_get_userdata (a->context);
 
   if (u->on_sendto) {
-    caml_callback3 (u->on_sendto, (value) a->context, addr, buf);
+    caml_callback2 (u->on_sendto, addr, buf);
   }
 
-  CAMLreturn(0);
+  CAMLreturn (0);
 }
 
 static uint64 on_log (utp_callback_arguments *a)
@@ -257,13 +260,16 @@ static uint64 on_firewall (utp_callback_arguments *a)
 
 CAMLprim value caml_utp_close (value socket)
 {
+  CAMLparam1 (socket);
+
   utp_close (Utp_socket_val (socket));
-  return Val_unit;
+
+  CAMLreturn (Val_unit);
 }
 
 CAMLprim value caml_utp_set_callback (value ctx, value cbnum, value fun)
 {
-  CAMLparam3(ctx, cbnum, fun);
+  CAMLparam3 (ctx, cbnum, fun);
 
   utp_context_userdata *u;
   value *cb;
@@ -292,12 +298,12 @@ CAMLprim value caml_utp_set_callback (value ctx, value cbnum, value fun)
     caml_register_generational_global_root (cb);
   }
 
-  CAMLreturn(Val_unit);
+  CAMLreturn (Val_unit);
 }
 
 CAMLprim value caml_socket_set_callback (value sock, value cbnum, value fun)
 {
-  CAMLparam3(sock, cbnum, fun);
+  CAMLparam3 (sock, cbnum, fun);
 
   utp_userdata *u;
   value *cb;
@@ -326,24 +332,24 @@ CAMLprim value caml_socket_set_callback (value sock, value cbnum, value fun)
   }
 
   if (*cb) {
-    caml_modify_generational_global_root(cb, fun);
+    caml_modify_generational_global_root (cb, fun);
   } else {
     *cb = fun;
-    caml_register_generational_global_root(cb);
+    caml_register_generational_global_root (cb);
   }
 
-  CAMLreturn(Val_unit);
+  CAMLreturn (Val_unit);
 }
 
-CAMLprim value caml_utp_init(value version)
+CAMLprim value caml_utp_init (value version)
 {
-  CAMLparam1(version);
-  CAMLlocal1(val);
+  CAMLparam1 (version);
+  CAMLlocal1 (val);
 
   utp_context *context;
   utp_context_userdata *u;
 
-  context = utp_init (Int_val(version));
+  context = utp_init (Int_val (version));
   u = calloc (1, sizeof (utp_context_userdata));
 
   u->sockets = 0;
@@ -376,7 +382,7 @@ CAMLprim value caml_utp_init(value version)
 
 CAMLprim value caml_utp_file_descr (value ctx)
 {
-  CAMLparam1(ctx);
+  CAMLparam1 (ctx);
 
   utp_context_userdata *u;
 
@@ -400,11 +406,11 @@ CAMLprim value caml_utp_readable (value context)
   u = utp_context_get_userdata (Utp_context_val (context));
 
   while (1) {
-    nread = recvfrom(u->fd, u->buffer, UTP_BUFFER_SIZE, 0, &addr.s_gen, &addr_len);
+    nread = recvfrom (u->fd, u->buffer, UTP_BUFFER_SIZE, 0, &addr.s_gen, &addr_len);
 
     if (nread < 0) {
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
-          nread = 0;
+        nread = 0;
       } else {
         UTP_DEBUG ("context error");
         if (u->on_error) {
@@ -430,18 +436,21 @@ CAMLprim value caml_utp_readable (value context)
     }
   }
 
-  CAMLreturn(Val_unit);
+  CAMLreturn (Val_unit);
 }
 
 CAMLprim value caml_utp_periodic (value context)
 {
+  CAMLparam1 (context);
+
   utp_check_timeouts (Utp_context_val (context));
-  return Val_unit;
+
+  CAMLreturn (Val_unit);
 }
 
 CAMLprim value caml_utp_bind (value ctx, value sa)
 {
-  CAMLparam2(ctx, sa);
+  CAMLparam2 (ctx, sa);
 
   union sock_addr_union addr;
   socklen_param_type addr_len;
@@ -453,7 +462,7 @@ CAMLprim value caml_utp_bind (value ctx, value sa)
 
   bind (u->fd, &addr.s_gen, addr_len);
 
-  CAMLreturn(Val_unit);
+  CAMLreturn (Val_unit);
 }
 
 CAMLprim value caml_utp_destroy (value ctx)
@@ -560,20 +569,20 @@ CAMLprim value caml_utp_getpeername (value sock)
   CAMLreturn (addr);
 }
 
-CAMLprim value caml_sendto_bytes(value fd, value buf, value off, value len, value sa)
-{
-  CAMLparam5(fd, buf, off, len, sa);
+/* CAMLprim value caml_sendto_bytes(value fd, value buf, value off, value len, value sa) */
+/* { */
+/*   CAMLparam5(fd, buf, off, len, sa); */
 
-  union sock_addr_union sock_addr;
-  socklen_param_type addr_len;
-  int res;
+/*   union sock_addr_union sock_addr; */
+/*   socklen_param_type addr_len; */
+/*   int res; */
 
-  get_sockaddr (sa, &sock_addr, &addr_len);
-  res = sendto (Int_val(fd), Caml_ba_data_val(buf) + Int_val(off), Int_val(len), 0, &sock_addr.s_gen, addr_len);
+/*   get_sockaddr (sa, &sock_addr, &addr_len); */
+/*   res = sendto (Int_val(fd), Caml_ba_data_val(buf) + Int_val(off), Int_val(len), 0, &sock_addr.s_gen, addr_len); */
 
-  if (res < 0) {
-    uerror ("sendto", sa);
-  }
+/*   if (res < 0) { */
+/*     uerror ("sendto", sa); */
+/*   } */
 
-  CAMLreturn (Val_unit);
-}
+/*   CAMLreturn (Val_unit); */
+/* } */
