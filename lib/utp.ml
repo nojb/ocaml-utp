@@ -42,32 +42,6 @@ type _ callback =
   | ON_EOF : (unit -> unit) callback
   | ON_CLOSE : (unit -> unit) callback
 
-type socket_stats =
-  {
-    nbytes_recv: int;
-    nbytes_xmit: int;
-    rexmit: int;
-    fastrexmit: int;
-    nxmit: int;
-    nrecv: int;
-    nduprecv: int;
-    mtu_guess: int;
-  }
-
-type context_stats =
-  {
-    nraw_recv_empty: int;
-    nraw_recv_small: int;
-    nraw_recv_mid: int;
-    nraw_recv_big: int;
-    nraw_recv_huge: int;
-    nraw_send_empty: int;
-    nraw_send_small: int;
-    nraw_send_mid: int;
-    nraw_send_big: int;
-    nraw_send_huge: int;
-  }
-
 type _ option =
   | LOG_NORMAL : bool option
   | LOG_MTU : bool option
@@ -82,13 +56,9 @@ external set_socket_callback: socket -> 'a callback -> 'a -> unit = "caml_socket
 external utp_destroy: context -> unit = "caml_utp_destroy"
 external socket: context -> socket = "caml_utp_create_socket"
 external write: socket -> bytes -> int -> int -> int = "caml_utp_write"
-external utp_check_timeouts: context -> unit = "caml_utp_check_timeouts"
 external connect: socket -> Unix.sockaddr -> unit = "caml_utp_connect"
-external utp_check_timeouts: context -> unit = "caml_utp_check_timeouts"
 external close: socket -> unit = "caml_utp_close"
-external get_stats: socket -> socket_stats = "caml_utp_get_stats"
 external utp_get_context: socket -> context = "caml_utp_get_context"
-external get_context_stats: context -> context_stats = "caml_utp_get_context_stats"
 external get_opt: socket -> 'a option -> 'a = "caml_utp_getsockopt"
 external set_opt: socket -> 'a option -> 'a -> unit = "caml_utp_setsockopt"
 external get_context_opt: context -> 'a option -> 'a = "caml_utp_context_get_option"
@@ -97,12 +67,13 @@ external utp_getpeername: socket -> Unix.inet_addr = "caml_utp_getpeername"
 external utp_file_descr: context -> Unix.file_descr = "caml_utp_file_descr"
 external bind: context -> Unix.sockaddr -> unit = "caml_utp_bind"
 external readable: context -> unit = "caml_utp_readable"
+external periodic: context -> unit = "caml_utp_periodic"
 
-let rec check_timeouts utp_ctx =
+let rec check_timeouts ctx =
   let open Lwt.Infix in
   Lwt_unix.sleep 0.5 >>= fun () ->
-  utp_check_timeouts utp_ctx;
-  check_timeouts utp_ctx
+  periodic ctx;
+  check_timeouts ctx
 
 let network_loop ctx =
   let open Lwt.Infix in

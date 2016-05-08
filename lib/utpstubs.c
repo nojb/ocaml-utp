@@ -458,37 +458,6 @@ CAMLprim value caml_utp_check_timeouts (value ctx)
   return Val_unit;
 }
 
-CAMLprim value caml_utp_get_stats(value sock)
-{
-  CAMLparam1(sock);
-  CAMLlocal1(stats);
-
-  utp_socket_stats *utp_stats;
-
-  utp_stats = utp_get_stats((utp_socket *)sock);
-
-  if (!utp_stats) {
-    caml_failwith("utp_get_stats");
-  }
-
-  stats = caml_alloc(8, 0);
-
-  if (!stats) {
-    caml_failwith("caml_utp_get_stats");
-  }
-
-  Store_field(stats, 0, Val_int(utp_stats->nbytes_recv));
-  Store_field(stats, 1, Val_int(utp_stats->nbytes_xmit));
-  Store_field(stats, 2, Val_int(utp_stats->rexmit));
-  Store_field(stats, 3, Val_int(utp_stats->fastrexmit));
-  Store_field(stats, 4, Val_int(utp_stats->nxmit));
-  Store_field(stats, 5, Val_int(utp_stats->nrecv));
-  Store_field(stats, 6, Val_int(utp_stats->nduprecv));
-  Store_field(stats, 7, Val_int(utp_stats->mtu_guess));
-
-  CAMLreturn(stats);
-}
-
 CAMLprim value caml_utp_get_context(value sock)
 {
   if (!sock) {
@@ -496,33 +465,6 @@ CAMLprim value caml_utp_get_context(value sock)
   }
 
   return (value)utp_get_context((utp_socket *)sock);
-}
-
-CAMLprim value caml_utp_get_context_stats(value ctx)
-{
-  utp_context_stats *utp_stats;
-  value stats;
-
-  utp_stats = utp_get_context_stats((utp_context *)ctx);
-
-  if (!utp_stats) {
-    caml_failwith("utp_get_context_stats");
-  }
-
-  stats = caml_alloc(10, 0);
-
-  Store_field(stats, 0, Val_int(utp_stats->_nraw_recv[0]));
-  Store_field(stats, 1, Val_int(utp_stats->_nraw_recv[1]));
-  Store_field(stats, 2, Val_int(utp_stats->_nraw_recv[2]));
-  Store_field(stats, 3, Val_int(utp_stats->_nraw_recv[3]));
-  Store_field(stats, 4, Val_int(utp_stats->_nraw_recv[4]));
-  Store_field(stats, 5, Val_int(utp_stats->_nraw_send[0]));
-  Store_field(stats, 6, Val_int(utp_stats->_nraw_send[1]));
-  Store_field(stats, 7, Val_int(utp_stats->_nraw_send[2]));
-  Store_field(stats, 8, Val_int(utp_stats->_nraw_send[3]));
-  Store_field(stats, 9, Val_int(utp_stats->_nraw_send[4]));
-
-  return stats;
 }
 
 CAMLprim value caml_utp_getsockopt(value socket, value opt)

@@ -42,32 +42,6 @@ type _ callback =
   | ON_EOF : (unit -> unit) callback
   | ON_CLOSE : (unit -> unit) callback
 
-type socket_stats =
-  {
-    nbytes_recv: int;
-    nbytes_xmit: int;
-    rexmit: int;
-    fastrexmit: int;
-    nxmit: int;
-    nrecv: int;
-    nduprecv: int;
-    mtu_guess: int;
-  }
-
-type context_stats =
-  {
-    nraw_recv_empty: int;
-    nraw_recv_small: int;
-    nraw_recv_mid: int;
-    nraw_recv_big: int;
-    nraw_recv_huge: int;
-    nraw_send_empty: int;
-    nraw_send_small: int;
-    nraw_send_mid: int;
-    nraw_send_big: int;
-    nraw_send_huge: int;
-  }
-
 type _ option =
   | LOG_NORMAL : bool option
   | LOG_MTU : bool option
@@ -85,9 +59,10 @@ val connect: socket -> Unix.sockaddr -> unit
 val bind: context -> Unix.sockaddr -> unit
 val write: socket -> bytes -> int -> int -> int
 val close: socket -> unit
-val get_stats: socket -> socket_stats
-val get_context_stats: context -> context_stats
 val get_opt: socket -> 'a option -> 'a
 val set_opt: socket -> 'a option -> 'a -> unit
 val get_context_opt: context -> 'a option -> 'a
 val set_context_opt: context -> 'a option -> 'a -> unit
+
+val readable: context -> unit
+val periodic: context -> unit
