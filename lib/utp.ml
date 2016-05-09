@@ -27,7 +27,6 @@ type buffer =
   (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
 
 type _ context_callback =
-  | ON_ERROR : (unit -> unit) context_callback
   | ON_SENDTO : (Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
   | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) context_callback
 
