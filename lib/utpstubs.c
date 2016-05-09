@@ -336,6 +336,10 @@ CAMLprim value stub_utp_init (value unit)
   context = utp_init (2);
   u = calloc (1, sizeof (utp_context_userdata));
 
+  if (!u) {
+    caml_failwith ("stub_utp_init: out of memory");
+  }
+
   u->sockets = 0;
   u->context = context;
 
@@ -412,7 +416,7 @@ CAMLprim value stub_utp_create_socket (value ctx)
   u = calloc (1, sizeof (utp_userdata));
 
   if (!u) {
-    caml_failwith ("caml_utp_create_socket: calloc");
+    caml_failwith ("stub_utp_create_socket: out of memory");
   }
 
   u->socket = socket;
@@ -482,10 +486,6 @@ CAMLprim value stub_utp_getpeername (value sock)
   }
 
   addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
-
-  if (!addr) {
-    caml_failwith ("caml_utp_getpeername: alloc_sockaddr");
-  }
 
   CAMLreturn (addr);
 }
