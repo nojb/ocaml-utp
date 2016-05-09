@@ -43,16 +43,14 @@ type _ callback =
   | ON_EOF : (unit -> unit) callback
   | ON_CLOSE : (unit -> unit) callback
 
-val context: unit -> context
+val init: unit -> context
 val set_context_callback: context -> 'a context_callback -> 'a -> unit
-val set_socket_callback: socket -> 'a callback -> 'a -> unit
+val set_callback: socket -> 'a callback -> 'a -> unit
 val set_debug: context -> bool -> unit
-
-val socket: context -> socket
+val create_socket: context -> socket
 val connect: socket -> Unix.sockaddr -> unit
 val write: socket -> buffer -> int -> int -> int
 val close: socket -> unit
-
-val process: context -> Unix.sockaddr -> buffer -> int -> int -> bool
-val periodic: context -> unit
+val process_udp: context -> Unix.sockaddr -> buffer -> int -> int -> bool
+val check_timeouts: context -> unit
 val issue_deferred_acks: context -> unit

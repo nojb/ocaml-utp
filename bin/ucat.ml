@@ -24,7 +24,7 @@ let o_debug = ref 0
 let o_listen = ref false
 let o_local_port = ref 0
 let o_local_address = ref ""
-let o_buf_size = ref 4096
+let o_buf_size = ref 65536
 let o_numeric = ref false
 let o_remote_port = ref 0
 let o_remote_address = ref ""
@@ -100,15 +100,15 @@ let main () =
 
   let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_DGRAM 0 in
 
-  let ctx = Utp.context () in
+  let ctx = Utp.init () in
 
   if !o_debug >= 2 then
     Utp.set_debug ctx true;
 
-  let the_buf = Lwt_bytes.create 62536 in
+  let the_buf = Lwt_bytes.create !o_buf_size in
   let rec read_loop () =
     let%lwt n, addr = Lwt_bytes.recvfrom fd the_buf 0 (Lwt_bytes.length the_buf) [] in
-    if Utp.process ctx addr the_buf 0 n then begin
+    if Utp.process_udp ctx addr the_buf 0 n then begin
       if not (Lwt_unix.readable fd) then Utp.issue_deferred_acks ctx;
       read_loop ()
     end else begin
@@ -119,7 +119,7 @@ let main () =
 
   let rec periodic_loop () =
     let%lwt () = Lwt_unix.sleep 0.5 in
-    Utp.periodic ctx;
+    Utp.check_timeouts ctx;
     periodic_loop ()
   in
 
@@ -143,17 +143,17 @@ let main () =
   match !o_listen with
   | false ->
       let%lwt addr = lookup !o_remote_address !o_remote_port in
-      let sock = Utp.socket ctx in
+      let sock = Utp.create_socket ctx in
       let t, u = Lwt.wait () in
       let writable = Lwt_condition.create () in
       let closed = Lwt_condition.create () in
-      Utp.set_socket_callback sock Utp.ON_WRITABLE (Lwt_condition.signal writable);
-      Utp.set_socket_callback sock Utp.ON_CLOSE (Lwt_condition.signal closed);
       let on_connect () =
         debug "Connected to %s" (string_of_sockaddr addr);
         Lwt.wakeup u ();
       in
-      Utp.set_socket_callback sock Utp.ON_CONNECT on_connect;
+      Utp.set_callback sock Utp.ON_WRITABLE (Lwt_condition.signal writable);
+      Utp.set_callback sock Utp.ON_CLOSE (Lwt_condition.signal closed);
+      Utp.set_callback sock Utp.ON_CONNECT on_connect;
       let rec write buf off len =
         if len = 0 then
           Lwt.return_unit
@@ -204,9 +204,9 @@ let main () =
       let on_accept sock addr =
         incr id;
         debug "Connection #%d accepted from %s" !id (string_of_sockaddr addr);
-        Utp.set_socket_callback sock Utp.ON_READ (on_read !id);
-        Utp.set_socket_callback sock Utp.ON_EOF (on_eof sock !id);
-        Utp.set_socket_callback sock Utp.ON_CLOSE (on_close !id)
+        Utp.set_callback sock Utp.ON_READ (on_read !id);
+        Utp.set_callback sock Utp.ON_EOF (on_eof sock !id);
+        Utp.set_callback sock Utp.ON_CLOSE (on_close !id)
       in
       Utp.set_context_callback ctx Utp.ON_ACCEPT on_accept;
       t

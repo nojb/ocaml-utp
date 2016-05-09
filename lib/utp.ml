@@ -43,14 +43,14 @@ type _ callback =
   | ON_EOF : (unit -> unit) callback
   | ON_CLOSE : (unit -> unit) callback
 
-external context: unit -> context = "stub_utp_init"
+external init: unit -> context = "stub_utp_init"
 external set_context_callback: context -> 'a context_callback -> 'a -> unit = "stub_utp_set_callback"
-external set_socket_callback: socket -> 'a callback -> 'a -> unit = "stub_socket_set_callback"
+external set_callback: socket -> 'a callback -> 'a -> unit = "stub_socket_set_callback"
 external set_debug: context -> bool -> unit = "stub_utp_set_debug"
-external socket: context -> socket = "stub_utp_create_socket"
+external create_socket: context -> socket = "stub_utp_create_socket"
 external write: socket -> buffer -> int -> int -> int = "stub_utp_write"
 external connect: socket -> Unix.sockaddr -> unit = "stub_utp_connect"
 external close: socket -> unit = "stub_utp_close"
-external process: context -> Unix.sockaddr -> buffer -> int -> int -> bool = "stub_utp_process_udp"
+external process_udp: context -> Unix.sockaddr -> buffer -> int -> int -> bool = "stub_utp_process_udp"
 external issue_deferred_acks: context -> unit = "stub_utp_issue_deferred_acks"
-external periodic: context -> unit = "stub_utp_check_timeouts"
+external check_timeouts: context -> unit = "stub_utp_check_timeouts"
