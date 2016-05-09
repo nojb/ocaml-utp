@@ -23,7 +23,6 @@
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
-#include <errno.h>
 
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
@@ -44,17 +43,12 @@
     fprintf (stderr, "\n"); \
   } while (0);
 
-#define UTP_BUFFER_SIZE 65536
-
 typedef struct {
   utp_context *context;
-  int fd;
   int sockets;
-  void *buffer;
   value on_error;
   value on_sendto;
   value on_accept;
-  value on_message;
 } utp_context_userdata;
 
 typedef struct {
@@ -283,9 +277,6 @@ CAMLprim value caml_utp_set_callback (value ctx, value cbnum, value fun)
     case 2:
       cb = &(u->on_accept);
       break;
-    case 3:
-      cb = &(u->on_message);
-      break;
   }
 
   if (*cb) {
@@ -338,9 +329,9 @@ CAMLprim value caml_socket_set_callback (value sock, value cbnum, value fun)
   CAMLreturn (Val_unit);
 }
 
-CAMLprim value caml_utp_init (value fd)
+CAMLprim value caml_utp_init (value unit)
 {
-  CAMLparam1 (fd);
+  CAMLparam1 (unit);
   CAMLlocal1 (val);
 
   utp_context *context;
@@ -351,12 +342,6 @@ CAMLprim value caml_utp_init (value fd)
 
   u->sockets = 0;
   u->context = context;
-  u->fd = Int_val (fd);
-  u->buffer = malloc (UTP_BUFFER_SIZE);
-
-  if (!(u->buffer)) {
-    caml_failwith ("caml_utp_init: malloc");
-  }
 
   utp_context_set_userdata (context, u);
 
@@ -373,50 +358,25 @@ CAMLprim value caml_utp_init (value fd)
   CAMLreturn (val);
 }
 
-CAMLprim value caml_utp_readable (value context)
+CAMLprim value caml_utp_process (value context, value addr, value buf, value off, value len)
 {
-  CAMLparam1(context);
-  CAMLlocal2(buf, sa);
+  CAMLparam5 (context, addr, buf, off, len);
 
-  union sock_addr_union addr;
+  union sock_addr_union sock_addr;
   socklen_param_type addr_len;
-  utp_context_userdata *u;
-  ssize_t nread;
-  bool handled;
+  int handled;
 
-  addr_len = sizeof (struct sockaddr_in);
-  u = utp_context_get_userdata (Utp_context_val (context));
+  get_sockaddr (addr, &sock_addr, &addr_len);
+  handled = utp_process_udp (Utp_context_val (context), Caml_ba_data_val (buf) + Int_val (off), Int_val (len), &sock_addr.s_gen, addr_len);
 
-  while (1) {
-    nread = recvfrom (u->fd, u->buffer, UTP_BUFFER_SIZE, 0, &addr.s_gen, &addr_len);
+  CAMLreturn (Val_bool (handled));
+}
 
-    if (nread < 0) {
-      if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        nread = 0;
-      } else {
-        UTP_DEBUG ("context error");
-        if (u->on_error) {
-          caml_callback (u->on_error, Val_unit);
-        }
-        break;
-      }
-    }
+CAMLprim value stub_utp_issue_deferred_acks (value context)
+{
+  CAMLparam1 (context);
 
-    if (nread == 0) {
-      /* UTP_DEBUG ("issuing deferred acks"); */
-      utp_issue_deferred_acks (Utp_context_val (context));
-      break;
-    }
-
-    handled = utp_process_udp (Utp_context_val (context), u->buffer, nread, &addr.s_gen, addr_len);
-
-    if (!handled && u->on_message) {
-      UTP_DEBUG ("not a utp message");
-      sa = alloc_sockaddr (&addr, addr_len, 0);
-      buf = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, u->buffer, nread);
-      caml_callback2 (u->on_message, sa, buf);
-    }
-  }
+  utp_issue_deferred_acks (Utp_context_val (context));
 
   CAMLreturn (Val_unit);
 }
@@ -492,7 +452,7 @@ CAMLprim value caml_utp_write (value socket, value buf, value off, value len)
 
   ssize_t written;
 
-  written = utp_write (Utp_socket_val (socket), String_val(buf) + Int_val(off), Int_val(len));
+  written = utp_write (Utp_socket_val (socket), Caml_ba_data_val(buf) + Int_val(off), Int_val(len));
 
   if (written < 0) {
     caml_failwith ("caml_utp_write: utp_write");

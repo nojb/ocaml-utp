@@ -23,11 +23,13 @@
 type context
 type socket
 
+type buffer =
+  (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
+
 type _ context_callback =
   | ON_ERROR : (unit -> unit) context_callback
   | ON_SENDTO : (Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
   | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) context_callback
-  | ON_MESSAGE : (Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
 
 type error =
   | ECONNREFUSED
@@ -42,15 +44,16 @@ type _ callback =
   | ON_EOF : (unit -> unit) callback
   | ON_CLOSE : (unit -> unit) callback
 
-val context: Unix.file_descr -> context
+val context: unit -> context
 val set_context_callback: context -> 'a context_callback -> 'a -> unit
 val set_socket_callback: socket -> 'a callback -> 'a -> unit
 val set_debug: context -> bool -> unit
 
 val socket: context -> socket
 val connect: socket -> Unix.sockaddr -> unit
-val write: socket -> bytes -> int -> int -> int
+val write: socket -> buffer -> int -> int -> int
 val close: socket -> unit
 
-val readable: context -> unit
+val process: context -> Unix.sockaddr -> buffer -> int -> int -> bool
 val periodic: context -> unit
+val issue_deferred_acks: context -> unit

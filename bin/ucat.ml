@@ -100,15 +100,21 @@ let main () =
 
   let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_DGRAM 0 in
 
-  let ctx = Utp.context (Lwt_unix.unix_file_descr fd) in
+  let ctx = Utp.context () in
 
   if !o_debug >= 2 then
     Utp.set_debug ctx true;
 
+  let the_buf = Lwt_bytes.create 62536 in
   let rec read_loop () =
-    let%lwt () = Lwt_unix.wait_read fd in
-    Utp.readable ctx;
-    read_loop ()
+    let%lwt n, addr = Lwt_bytes.recvfrom fd the_buf 0 (Lwt_bytes.length the_buf) [] in
+    if Utp.process ctx addr the_buf 0 n then begin
+      if not (Lwt_unix.readable fd) then Utp.issue_deferred_acks ctx;
+      read_loop ()
+    end else begin
+      debug "received a non-utp message";
+      read_loop ()
+    end
   in
 
   let rec periodic_loop () =
@@ -158,9 +164,9 @@ let main () =
           else
             write buf (off + n) (len - n)
       in
-      let read_buf = Bytes.create !o_buf_size in
+      let read_buf = Lwt_bytes.create !o_buf_size in
       let rec echo_loop () =
-        match%lwt Lwt_unix.read Lwt_unix.stdin read_buf 0 (Bytes.length read_buf) with
+        match%lwt Lwt_bytes.read Lwt_unix.stdin read_buf 0 (Lwt_bytes.length read_buf) with
         | 0 ->
             debug "Read EOF from stdin; closing socket";
             let t = Lwt_condition.wait closed in

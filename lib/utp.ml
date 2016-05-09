@@ -23,11 +23,13 @@
 type context
 type socket
 
+type buffer =
+  (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
+
 type _ context_callback =
   | ON_ERROR : (unit -> unit) context_callback
   | ON_SENDTO : (Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
   | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) context_callback
-  | ON_MESSAGE : (Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
 
 type error =
   | ECONNREFUSED
@@ -42,15 +44,16 @@ type _ callback =
   | ON_EOF : (unit -> unit) callback
   | ON_CLOSE : (unit -> unit) callback
 
-external context: Unix.file_descr -> context = "caml_utp_init"
+external context: unit -> context = "caml_utp_init"
 external set_context_callback: context -> 'a context_callback -> 'a -> unit = "caml_utp_set_callback"
 external set_socket_callback: socket -> 'a callback -> 'a -> unit = "caml_socket_set_callback"
 external set_debug: context -> bool -> unit = "caml_utp_set_debug"
 external utp_destroy: context -> unit = "caml_utp_destroy"
 external socket: context -> socket = "caml_utp_create_socket"
-external write: socket -> bytes -> int -> int -> int = "caml_utp_write"
+external write: socket -> buffer -> int -> int -> int = "caml_utp_write"
 external connect: socket -> Unix.sockaddr -> unit = "caml_utp_connect"
 external close: socket -> unit = "caml_utp_close"
 external utp_getpeername: socket -> Unix.sockaddr = "caml_utp_getpeername"
-external readable: context -> unit = "caml_utp_readable"
+external process: context -> Unix.sockaddr -> buffer -> int -> int -> bool = "caml_utp_process"
+external issue_deferred_acks: context -> unit = "stub_utp_issue_deferred_acks"
 external periodic: context -> unit = "caml_utp_periodic"
