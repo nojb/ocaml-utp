@@ -67,6 +67,7 @@ typedef struct {
 
 static void free_utp_context_userdata (utp_context_userdata *u)
 {
+  UTP_DEBUG ("FREE utp_context_userdata");
   if (u->on_sendto) {
     caml_remove_generational_global_root (&(u->on_sendto));
   }
@@ -79,6 +80,7 @@ static void free_utp_context_userdata (utp_context_userdata *u)
 static void finalize_utp_context (value v)
 {
   utp_context_userdata *u;
+  UTP_DEBUG ("FINALIZE utp_context");
   u = utp_context_get_userdata (Utp_context_val (v));
   if (u->sockets == 0) {
     utp_destroy (Utp_context_val (v));
@@ -110,6 +112,7 @@ static value alloc_utp_context (utp_context *context)
 
 static void free_utp_userdata (utp_userdata *u)
 {
+  UTP_DEBUG ("FREE utp_userdata");
   if (u->on_error) {
     caml_remove_generational_global_root (&(u->on_error));
   }
@@ -134,6 +137,7 @@ static void free_utp_userdata (utp_userdata *u)
 static void finalize_utp_socket (value v)
 {
   utp_userdata *u;
+  UTP_DEBUG ("FINALIZE utp_socket");
   u = utp_get_userdata (Utp_socket_val (v));
   if (u->destroyed) {
     free_utp_userdata (u);

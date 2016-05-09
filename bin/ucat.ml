@@ -29,12 +29,15 @@ let o_numeric = ref false
 let o_remote_port = ref 0
 let o_remote_address = ref ""
 
-let fatal fmt =
-  Printf.printf ("fatal: " ^^ fmt ^^ "\n%!")
-
 let debug fmt =
   if !o_debug > 0 then
-    Printf.eprintf ("debug: " ^^ fmt ^^ "\n%!")
+    Printf.eprintf ("[debug] " ^^ fmt ^^ "\n%!")
+  else
+    Printf.ifprintf stderr fmt
+
+let really_debug fmt =
+  if !o_debug > 1 then
+    Printf.eprintf ("[debug] " ^^ fmt ^^ "\n%!")
   else
     Printf.ifprintf stderr fmt
 
@@ -184,10 +187,10 @@ let main () =
       let t, u = Lwt.wait () in
       let write_mutex = Lwt_mutex.create () in
       let on_read id buf =
-        debug "Received %d bytes from #%d" (Lwt_bytes.length buf) id;
         let buf = Lwt_bytes.to_bytes buf in
         let _ =
           Lwt_mutex.with_lock write_mutex (fun () ->
+              really_debug "Received %d bytes from #%d:" (Bytes.length buf) id;
               Lwt_unix.write Lwt_unix.stdout buf 0 (Bytes.length buf)
             )
         in
@@ -216,8 +219,8 @@ let () =
     Lwt_main.run (main ())
   with
   | Exit ->
-      Arg.usage spec usage_msg;
-      exit 2
+      Arg.usage spec usage_msg
   | Failure s ->
-      fatal "%s" s;
-      exit 1
+      Printf.printf "Fatal error: %s\n%!" s;
+  | e ->
+      Printf.printf "Fatal error: %s\n%!" (Printexc.to_string e)
