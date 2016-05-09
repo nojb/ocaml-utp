@@ -169,10 +169,10 @@ static uint64 on_read (utp_callback_arguments* a)
 
   utp_userdata *u;
 
-  ba = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
   u = utp_get_userdata (a->socket);
 
   if (u->on_read) {
+    ba = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
     caml_callback (u->on_read, ba);
   }
 
