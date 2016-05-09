@@ -260,13 +260,13 @@ static uint64 on_sendto (utp_callback_arguments *a)
   socklen_param_type sock_addr_len;
   utp_context_userdata *u;
 
-  sock_addr_len = sizeof (struct sockaddr_in);
-  memcpy (&sock_addr.s_inet, (struct sockaddr_in *) a->address, sock_addr_len);
-  addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
-  buf = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
   u = utp_context_get_userdata (a->context);
 
   if (u->on_sendto) {
+    sock_addr_len = sizeof (struct sockaddr_in);
+    memcpy (&sock_addr.s_inet, (struct sockaddr_in *) a->address, sock_addr_len);
+    addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
+    buf = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
     caml_callback2 (u->on_sendto, addr, buf);
   }
 
@@ -463,15 +463,6 @@ CAMLprim value stub_utp_check_timeouts (value context)
   CAMLreturn (Val_unit);
 }
 
-CAMLprim value stub_utp_destroy (value ctx)
-{
-  CAMLparam1 (ctx);
-
-  utp_destroy (Utp_context_val (ctx));
-
-  CAMLreturn (Val_unit);
-}
-
 CAMLprim value stub_utp_create_socket (value ctx)
 {
   CAMLparam1 (ctx);
@@ -549,24 +540,4 @@ CAMLprim value stub_utp_set_debug (value context, value v)
   utp_context_set_option (Utp_context_val (context), UTP_LOG_DEBUG, Bool_val (v));
 
   CAMLreturn (Val_unit);
-}
-
-CAMLprim value stub_utp_getpeername (value sock)
-{
-  CAMLparam1 (sock);
-  CAMLlocal1 (addr);
-
-  int res;
-  union sock_addr_union sock_addr;
-  socklen_param_type sock_addr_len;
-
-  res = utp_getpeername (Utp_socket_val (sock), &sock_addr.s_gen, &sock_addr_len);
-
-  if (res < 0) {
-    caml_failwith ("utp_getpeername");
-  }
-
-  addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
-
-  CAMLreturn (addr);
 }
