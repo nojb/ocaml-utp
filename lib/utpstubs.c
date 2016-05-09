@@ -23,8 +23,6 @@
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <errno.h>
 
 #include <caml/memory.h>
@@ -340,28 +338,24 @@ CAMLprim value caml_socket_set_callback (value sock, value cbnum, value fun)
   CAMLreturn (Val_unit);
 }
 
-CAMLprim value caml_utp_init (value version)
+CAMLprim value caml_utp_init (value fd)
 {
-  CAMLparam1 (version);
+  CAMLparam1 (fd);
   CAMLlocal1 (val);
 
   utp_context *context;
   utp_context_userdata *u;
 
-  context = utp_init (Int_val (version));
+  context = utp_init (2);
   u = calloc (1, sizeof (utp_context_userdata));
 
   u->sockets = 0;
   u->context = context;
-  u->fd = socket (PF_INET, SOCK_DGRAM, 0);
+  u->fd = Int_val (fd);
   u->buffer = malloc (UTP_BUFFER_SIZE);
 
   if (!(u->buffer)) {
     caml_failwith ("caml_utp_init: malloc");
-  }
-
-  if (fcntl (u->fd, F_SETFL, O_NONBLOCK, 1) < 0) {
-    caml_failwith ("caml_utp_init: fcntl");
   }
 
   utp_context_set_userdata (context, u);
@@ -377,17 +371,6 @@ CAMLprim value caml_utp_init (value version)
   val = alloc_utp_context (context);
 
   CAMLreturn (val);
-}
-
-CAMLprim value caml_utp_file_descr (value ctx)
-{
-  CAMLparam1 (ctx);
-
-  utp_context_userdata *u;
-
-  u = utp_context_get_userdata (Utp_context_val (ctx));
-
-  CAMLreturn (Val_int (u->fd));
 }
 
 CAMLprim value caml_utp_readable (value context)
@@ -443,23 +426,6 @@ CAMLprim value caml_utp_periodic (value context)
   CAMLparam1 (context);
 
   utp_check_timeouts (Utp_context_val (context));
-
-  CAMLreturn (Val_unit);
-}
-
-CAMLprim value caml_utp_bind (value ctx, value sa)
-{
-  CAMLparam2 (ctx, sa);
-
-  union sock_addr_union addr;
-  socklen_param_type addr_len;
-  utp_context_userdata *u;
-
-  u = utp_context_get_userdata (Utp_context_val (ctx));
-
-  get_sockaddr (sa, &addr, &addr_len);
-
-  bind (u->fd, &addr.s_gen, addr_len);
 
   CAMLreturn (Val_unit);
 }

@@ -42,7 +42,7 @@ type _ callback =
   | ON_EOF : (unit -> unit) callback
   | ON_CLOSE : (unit -> unit) callback
 
-external utp_init: int -> context = "caml_utp_init"
+external context: Unix.file_descr -> context = "caml_utp_init"
 external set_context_callback: context -> 'a context_callback -> 'a -> unit = "caml_utp_set_callback"
 external set_socket_callback: socket -> 'a callback -> 'a -> unit = "caml_socket_set_callback"
 external set_debug: context -> bool -> unit = "caml_utp_set_debug"
@@ -52,10 +52,5 @@ external write: socket -> bytes -> int -> int -> int = "caml_utp_write"
 external connect: socket -> Unix.sockaddr -> unit = "caml_utp_connect"
 external close: socket -> unit = "caml_utp_close"
 external utp_getpeername: socket -> Unix.sockaddr = "caml_utp_getpeername"
-external file_descr: context -> Unix.file_descr = "caml_utp_file_descr"
-external bind: context -> Unix.sockaddr -> unit = "caml_utp_bind"
 external readable: context -> unit = "caml_utp_readable"
 external periodic: context -> unit = "caml_utp_periodic"
-
-let context () =
-  utp_init 2

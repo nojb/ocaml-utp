@@ -98,8 +98,9 @@ let main () =
   if not !o_listen && (!o_remote_port = 0 || !o_remote_address = "") then
     raise Exit;
 
-  let ctx = Utp.context () in
-  let fd = Lwt_unix.of_unix_file_descr (Utp.file_descr ctx) in
+  let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_DGRAM 0 in
+
+  let ctx = Utp.context (Lwt_unix.unix_file_descr fd) in
 
   if !o_debug >= 2 then
     Utp.set_debug ctx true;
@@ -173,7 +174,7 @@ let main () =
       t >> echo_loop ()
   | true ->
       let%lwt addr = lookup !o_local_address !o_local_port in
-      Utp.bind ctx addr;
+      Lwt_unix.bind fd addr;
       let t, u = Lwt.wait () in
       let write_mutex = Lwt_mutex.create () in
       let on_read id buf =

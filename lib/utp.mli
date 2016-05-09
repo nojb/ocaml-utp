@@ -42,15 +42,13 @@ type _ callback =
   | ON_EOF : (unit -> unit) callback
   | ON_CLOSE : (unit -> unit) callback
 
-val context: unit -> context
+val context: Unix.file_descr -> context
 val set_context_callback: context -> 'a context_callback -> 'a -> unit
 val set_socket_callback: socket -> 'a callback -> 'a -> unit
-val file_descr: context -> Unix.file_descr
 val set_debug: context -> bool -> unit
 
 val socket: context -> socket
 val connect: socket -> Unix.sockaddr -> unit
-val bind: context -> Unix.sockaddr -> unit
 val write: socket -> bytes -> int -> int -> int
 val close: socket -> unit
 
