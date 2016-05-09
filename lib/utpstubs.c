@@ -45,6 +45,7 @@
 
 typedef struct {
   utp_context *context;
+  int finalized;
   int sockets;
   value on_sendto;
   value on_accept;
@@ -52,6 +53,8 @@ typedef struct {
 
 typedef struct {
   utp_socket *socket;
+  int destroyed;
+  int finalized;
   value on_error;
   value on_read;
   value on_connect;
@@ -60,16 +63,39 @@ typedef struct {
   value on_close;
 } utp_userdata;
 
+#define Utp_context_val(v) (*(utp_context **) (Data_custom_val (v)))
+
+static void free_utp_context_userdata (utp_context_userdata *u)
+{
+  if (u->on_sendto) {
+    caml_remove_generational_global_root (&(u->on_sendto));
+  }
+  if (u->on_accept) {
+    caml_remove_generational_global_root (&(u->on_accept));
+  }
+  free (u);
+}
+
+static void finalize_utp_context (value v)
+{
+  utp_context_userdata *u;
+  u = utp_context_get_userdata (Utp_context_val (v));
+  if (u->sockets == 0) {
+    utp_destroy (Utp_context_val (v));
+    free_utp_context_userdata (u);
+  } else {
+    u->finalized = 1;
+  }
+}
+
 static struct custom_operations utp_context_custom_ops = {
   .identifier = "utp context",
-  .finalize = custom_finalize_default,
+  .finalize = finalize_utp_context,
   .compare = custom_compare_default,
   .hash = custom_hash_default,
   .serialize = custom_serialize_default,
   .deserialize = custom_deserialize_default
 };
-
-#define Utp_context_val(v) (*(utp_context **) (Data_custom_val (v)))
 
 static value alloc_utp_context (utp_context *context)
 {
@@ -80,16 +106,50 @@ static value alloc_utp_context (utp_context *context)
     CAMLreturn(v);
 }
 
+#define Utp_socket_val(v) (*(utp_socket **) (Data_custom_val (v)))
+
+static void free_utp_userdata (utp_userdata *u)
+{
+  if (u->on_error) {
+    caml_remove_generational_global_root (&(u->on_error));
+  }
+  if (u->on_read) {
+    caml_remove_generational_global_root (&(u->on_read));
+  }
+  if (u->on_connect) {
+    caml_remove_generational_global_root (&(u->on_connect));
+  }
+  if (u->on_writable) {
+    caml_remove_generational_global_root (&(u->on_writable));
+  }
+  if (u->on_eof) {
+    caml_remove_generational_global_root (&(u->on_eof));
+  }
+  if (u->on_close) {
+    caml_remove_generational_global_root (&(u->on_close));
+  }
+  free (u);
+}
+
+static void finalize_utp_socket (value v)
+{
+  utp_userdata *u;
+  u = utp_get_userdata (Utp_socket_val (v));
+  if (u->destroyed) {
+    free_utp_userdata (u);
+  } else {
+    u->finalized = 1;
+  }
+}
+
 static struct custom_operations utp_socket_custom_ops = {
   .identifier = "utp socket",
-  .finalize = custom_finalize_default,
+  .finalize = finalize_utp_socket,
   .compare = custom_compare_default,
   .hash = custom_hash_default,
   .serialize = custom_serialize_default,
   .deserialize = custom_deserialize_default
 };
-
-#define Utp_socket_val(v) (*(utp_socket **) (Data_custom_val (v)))
 
 static value alloc_utp_socket (utp_socket *socket)
 {
@@ -141,11 +201,20 @@ static uint64 on_state_change (utp_callback_arguments *a)
       cb = u->on_eof;
       break;
     case UTP_STATE_DESTROYING:
+      if (u->finalized) {
+        free_utp_userdata (u);
+      } else {
+        u->destroyed = 1;
+      }
       cu->sockets --;
+      if (cu->sockets == 0 && cu->finalized) {
+        utp_destroy (a->context);
+        free_utp_context_userdata (cu);
+      }
       cb = u->on_close;
       break;
     default:
-      UTP_DEBUG ("unknown state change");
+      UTP_DEBUG ("unknown state change: %d", a->state);
       break;
   }
 
@@ -220,21 +289,23 @@ static uint64 on_accept (utp_callback_arguments *a)
   union sock_addr_union sock_addr;
   socklen_param_type sock_addr_len;
 
-  sock_addr_len = sizeof (struct sockaddr_in);
-  memcpy (&sock_addr.s_inet, (struct sockaddr_in *) a->address, sock_addr_len);
-  addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
-
-  if (!addr) {
-    caml_failwith ("on_accept: alloc_sockaddr");
-  }
-
-  su = calloc (1, sizeof (utp_userdata));
-  su->socket = a->socket;
-  utp_set_userdata (a->socket, su);
-
   u = utp_context_get_userdata (a->context);
 
   if (u->on_accept) {
+    sock_addr_len = sizeof (struct sockaddr_in);
+    memcpy (&sock_addr.s_inet, (struct sockaddr_in *) a->address, sock_addr_len);
+    addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
+
+    su = calloc (1, sizeof (utp_userdata));
+
+    if (!su) {
+      caml_fatal_error ("on_accept: out of memory");
+    }
+
+    su->socket = a->socket;
+    su->destroyed = 0;
+    su->finalized = 0;
+    utp_set_userdata (a->socket, su);
     u->sockets ++;
     val = alloc_utp_socket (a->socket);
     caml_callback2 (u->on_accept, val, addr);
@@ -337,11 +408,12 @@ CAMLprim value stub_utp_init (value unit)
   u = calloc (1, sizeof (utp_context_userdata));
 
   if (!u) {
-    caml_failwith ("stub_utp_init: out of memory");
+    caml_fatal_error ("stub_utp_init: out of memory");
   }
 
   u->sockets = 0;
   u->context = context;
+  u->finalized = 0;
 
   utp_context_set_userdata (context, u);
 
@@ -406,6 +478,7 @@ CAMLprim value stub_utp_create_socket (value ctx)
 
   utp_socket *socket;
   utp_userdata *u;
+  utp_context_userdata *su;
 
   socket = utp_create_socket (Utp_context_val (ctx));
 
@@ -416,11 +489,16 @@ CAMLprim value stub_utp_create_socket (value ctx)
   u = calloc (1, sizeof (utp_userdata));
 
   if (!u) {
-    caml_failwith ("stub_utp_create_socket: out of memory");
+    caml_fatal_error ("stub_utp_create_socket: out of memory");
   }
 
   u->socket = socket;
+  u->destroyed = 0;
+  u->finalized = 0;
   utp_set_userdata (socket, u);
+
+  su = utp_context_get_userdata (Utp_context_val (ctx));
+  su->sockets ++;
 
   val = alloc_utp_socket (socket);
 
