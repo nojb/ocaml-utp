@@ -26,26 +26,23 @@ type socket
 type buffer =
   (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
 
-type _ context_callback =
-  | ON_SENDTO : (Unix.sockaddr -> Lwt_bytes.t -> unit) context_callback
-  | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) context_callback
-
 type error =
   | ECONNREFUSED
   | ECONNRESET
   | ETIMEDOUT
 
 type _ callback =
-  | ON_ERROR : (error -> unit) callback
-  | ON_READ : (Lwt_bytes.t -> unit) callback
-  | ON_CONNECT : (unit -> unit) callback
-  | ON_WRITABLE : (unit -> unit) callback
-  | ON_EOF : (unit -> unit) callback
-  | ON_CLOSE : (unit -> unit) callback
+  | ON_SENDTO : (Unix.sockaddr -> Lwt_bytes.t -> unit) callback
+  | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) callback
+  | ON_ERROR : (socket -> error -> unit) callback
+  | ON_READ : (socket -> Lwt_bytes.t -> unit) callback
+  | ON_CONNECT : (socket -> unit) callback
+  | ON_WRITABLE : (socket -> unit) callback
+  | ON_EOF : (socket -> unit) callback
+  | ON_CLOSE : (socket -> unit) callback
 
 val init: unit -> context
-val set_context_callback: context -> 'a context_callback -> 'a -> unit
-val set_callback: socket -> 'a callback -> 'a -> unit
+val set_callback: context -> 'a callback -> 'a -> unit
 val set_debug: context -> bool -> unit
 val create_socket: context -> socket
 val connect: socket -> Unix.sockaddr -> unit
@@ -54,3 +51,4 @@ val close: socket -> unit
 val process_udp: context -> Unix.sockaddr -> buffer -> int -> int -> bool
 val check_timeouts: context -> unit
 val issue_deferred_acks: context -> unit
+val get_id: socket -> int

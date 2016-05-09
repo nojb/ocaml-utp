@@ -76,6 +76,8 @@ let die fmt =
 
 module U = Lwt_unix
 
+open Lwt.Infix
+
 let lookup addr port =
   let hints = [U.AI_FAMILY U.PF_INET; U.AI_SOCKTYPE U.SOCK_DGRAM] in
   let hints = if !o_numeric then U.AI_NUMERICHOST :: hints else hints in
@@ -110,60 +112,62 @@ let main () =
 
   let the_buf = Lwt_bytes.create !o_buf_size in
   let rec read_loop () =
-    let%lwt n, addr = Lwt_bytes.recvfrom fd the_buf 0 (Lwt_bytes.length the_buf) [] in
+    Lwt_bytes.recvfrom fd the_buf 0 (Lwt_bytes.length the_buf) [] >>= fun (n, addr) ->
+    debug "received packet";
     if Utp.process_udp ctx addr the_buf 0 n then begin
-      if not (Lwt_unix.readable fd) then Utp.issue_deferred_acks ctx;
+      if not (Lwt_unix.readable fd) then begin
+        debug "issue deferred acks";
+        Utp.issue_deferred_acks ctx
+      end;
       read_loop ()
     end else begin
       debug "received a non-utp message";
       read_loop ()
     end
   in
-
   let rec periodic_loop () =
-    let%lwt () = Lwt_unix.sleep 0.5 in
+    Lwt_unix.sleep 0.5 >>= fun () ->
+    (* debug "check_timeouts"; *)
     Utp.check_timeouts ctx;
     periodic_loop ()
   in
-
   let _event_loop = Lwt.join [read_loop (); periodic_loop ()] in
-
-  let send_mutex = Lwt_mutex.create () in
-
-  let on_send addr buf =
-    (* Lwt_unix.check_descriptor fd; *)
+  let mut = Lwt_mutex.create () in
+  let on_sendto addr buf =
+    debug "on_sendto";
     let buf = Lwt_bytes.to_bytes buf in
     let _ =
-      Lwt_mutex.with_lock send_mutex (fun () ->
+      Lwt_mutex.with_lock mut (fun () ->
           Lwt_unix.sendto fd buf 0 (Bytes.length buf) [] addr
         )
     in
     ()
   in
-
-  Utp.set_context_callback ctx Utp.ON_SENDTO on_send;
-
+  Utp.set_callback ctx Utp.ON_SENDTO on_sendto;
+  Utp.set_callback ctx Utp.ON_ERROR (fun _ _ -> debug "on_error");
   match !o_listen with
   | false ->
-      let%lwt addr = lookup !o_remote_address !o_remote_port in
-      let sock = Utp.create_socket ctx in
-      let t, u = Lwt.wait () in
+      lookup !o_remote_address !o_remote_port >>= fun addr ->
+      let connected, connect = Lwt.wait () in
       let writable = Lwt_condition.create () in
       let closed = Lwt_condition.create () in
-      let on_connect () =
-        debug "Connected to %s" (string_of_sockaddr addr);
-        Lwt.wakeup u ();
-      in
-      Utp.set_callback sock Utp.ON_WRITABLE (Lwt_condition.signal writable);
-      Utp.set_callback sock Utp.ON_CLOSE (Lwt_condition.signal closed);
-      Utp.set_callback sock Utp.ON_CONNECT on_connect;
+      Utp.set_callback ctx Utp.ON_WRITABLE
+        (fun sock -> debug "on_writable"; Lwt_condition.signal writable sock);
+      Utp.set_callback ctx Utp.ON_CLOSE
+        (fun sock -> debug "on_close"; Lwt_condition.signal closed sock);
+      Utp.set_callback ctx Utp.ON_CONNECT (fun sock ->
+          debug "Connected to %s" (string_of_sockaddr addr);
+          Lwt.wakeup connect sock
+        );
+      let sock = Utp.create_socket ctx in
       let rec write buf off len =
         if len = 0 then
           Lwt.return_unit
         else
           let n = Utp.write sock buf off len in
           if n = 0 then
-            Lwt_condition.wait writable >> write buf off len
+            Lwt_condition.wait writable >>= fun _ ->
+            write buf off len
           else
             write buf (off + n) (len - n)
       in
@@ -174,44 +178,54 @@ let main () =
             debug "Read EOF from stdin; closing socket";
             let t = Lwt_condition.wait closed in
             Utp.close sock;
-            t
+            t >>= fun _ -> Lwt.return_unit
         | n ->
-            let%lwt () = write read_buf 0 n in
-            echo_loop ()
+            write read_buf 0 n >>= echo_loop
       in
       Utp.connect sock addr;
-      t >> echo_loop ()
+      connected >>= fun _ -> echo_loop ()
   | true ->
-      let%lwt addr = lookup !o_local_address !o_local_port in
+      lookup !o_local_address !o_local_port >>= fun addr ->
       Lwt_unix.bind fd addr;
-      let t, u = Lwt.wait () in
-      let write_mutex = Lwt_mutex.create () in
-      let on_read id buf =
+      let incoming = Hashtbl.create 0 in
+      let mut = Lwt_mutex.create () in
+      let on_read sock buf =
+        debug "on_read";
+        let id = Hashtbl.find incoming sock in
         let buf = Lwt_bytes.to_bytes buf in
         let _ =
-          Lwt_mutex.with_lock write_mutex (fun () ->
+          Lwt_mutex.with_lock mut (fun () ->
               really_debug "Received %d bytes from #%d:" (Bytes.length buf) id;
               Lwt_unix.write Lwt_unix.stdout buf 0 (Bytes.length buf)
             )
         in
         ()
       in
-      let on_close id () =
-        debug "Socket #%d closed" id
-      in
-      let on_eof sock id () =
+      let on_eof sock =
+        debug "on_eof";
+        let id = Hashtbl.find incoming sock in
         debug "Socket #%d eof'd" id;
         Utp.close sock
       in
+      let on_close sock =
+        (* Gc.compact (); *)
+        debug "on_close";
+        let id = Hashtbl.find incoming sock in
+        debug "Socket #%d (%d) closed" id (Utp.get_id sock);
+        Hashtbl.remove incoming sock
+      in
       let id = ref (-1) in
       let on_accept sock addr =
+        debug "on_accept";
         incr id;
+        Hashtbl.add incoming sock !id;
         debug "Connection #%d accepted from %s" !id (string_of_sockaddr addr);
-        Utp.set_callback sock Utp.ON_READ (on_read !id);
-        Utp.set_callback sock Utp.ON_EOF (on_eof sock !id);
-        Utp.set_callback sock Utp.ON_CLOSE (on_close !id)
       in
-      Utp.set_context_callback ctx Utp.ON_ACCEPT on_accept;
+      Utp.set_callback ctx Utp.ON_READ on_read;
+      Utp.set_callback ctx Utp.ON_EOF on_eof;
+      Utp.set_callback ctx Utp.ON_CLOSE on_close;
+      Utp.set_callback ctx Utp.ON_ACCEPT on_accept;
+      let t, _ = Lwt.wait () in
       t
 
 let () =
