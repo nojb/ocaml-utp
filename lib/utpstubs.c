@@ -296,17 +296,21 @@ static uint64 on_accept (utp_callback_arguments *a)
     memcpy (&sock_addr.s_inet, (struct sockaddr_in *) a->address, sock_addr_len);
     addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
 
-    su = calloc (1, sizeof (utp_userdata));
-
-    if (!su) {
-      caml_fatal_error ("on_accept: out of memory");
-    }
-
+    su = caml_stat_alloc (sizeof (utp_userdata));
     su->socket = a->socket;
     su->destroyed = 0;
     su->finalized = 0;
+    su->on_error = 0;
+    su->on_read = 0;
+    su->on_connect = 0;
+    su->on_writable = 0;
+    su->on_eof = 0;
+    su->on_close = 0;
+
     utp_set_userdata (a->socket, su);
+
     u->sockets ++;
+
     val = alloc_utp_socket (a->socket);
     caml_callback2 (u->on_accept, val, addr);
   }
@@ -405,15 +409,12 @@ CAMLprim value stub_utp_init (value unit)
   utp_context_userdata *u;
 
   context = utp_init (2);
-  u = calloc (1, sizeof (utp_context_userdata));
-
-  if (!u) {
-    caml_fatal_error ("stub_utp_init: out of memory");
-  }
-
-  u->sockets = 0;
+  u = caml_stat_alloc (sizeof (utp_context_userdata));
   u->context = context;
   u->finalized = 0;
+  u->sockets = 0;
+  u->on_sendto = 0;
+  u->on_accept = 0;
 
   utp_context_set_userdata (context, u);
 
@@ -486,15 +487,17 @@ CAMLprim value stub_utp_create_socket (value ctx)
     caml_failwith ("utp_create_socket");
   }
 
-  u = calloc (1, sizeof (utp_userdata));
-
-  if (!u) {
-    caml_fatal_error ("stub_utp_create_socket: out of memory");
-  }
-
+  u = caml_stat_alloc (sizeof (utp_userdata));
   u->socket = socket;
   u->destroyed = 0;
   u->finalized = 0;
+  u->on_error = 0;
+  u->on_read = 0;
+  u->on_connect = 0;
+  u->on_writable = 0;
+  u->on_eof = 0;
+  u->on_close = 0;
+
   utp_set_userdata (socket, u);
 
   su = utp_context_get_userdata (Utp_context_val (ctx));
