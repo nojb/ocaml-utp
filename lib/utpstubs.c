@@ -72,7 +72,7 @@ typedef struct {
 
 static void free_utp_context_userdata (utp_context_userdata *u)
 {
-  UTP_DEBUG ("FREE utp_context_userdata");
+  UTP_DEBUG ("free_utp_context_userdata");
   if (u->on_sendto) {
     caml_remove_generational_global_root (&(u->on_sendto));
   }
