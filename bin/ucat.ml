@@ -424,9 +424,7 @@ end = struct
     let id = Utp.create_socket ctx.id in
     let sock = create_socket id in
     Hashtbl.add sockets id sock;
-    debug "foo";
     Utp.connect sock.id addr;
-    debug "bar";
     sock.on_connected >>= fun () -> Lwt.return sock
 
   let close (sock : socket) =
