@@ -463,14 +463,14 @@ end = struct
     Lwt_mutex.with_lock sock.write_mutex (fun () -> loop off len)
 
   let () =
-    Callback.register "utp_on_error" on_error;
-    Callback.register "utp_on_read" on_read;
-    Callback.register "utp_on_connect" on_connect;
-    Callback.register "utp_on_writable" on_writable;
-    Callback.register "utp_on_eof" on_eof;
-    Callback.register "utp_on_close" on_close;
-    Callback.register "utp_on_accept" on_accept;
-    Callback.register "utp_on_sendto" on_sendto
+    Callback.register "utp_on_error" (on_error : Utp.socket -> Utp.error -> unit);
+    Callback.register "utp_on_read" (on_read : Utp.socket -> Utp.buffer -> unit);
+    Callback.register "utp_on_connect" (on_connect : Utp.socket -> unit);
+    Callback.register "utp_on_writable" (on_writable : Utp.socket -> unit);
+    Callback.register "utp_on_eof" (on_eof : Utp.socket -> unit);
+    Callback.register "utp_on_close" (on_close : Utp.socket -> unit);
+    Callback.register "utp_on_accept" (on_accept : Utp.context -> Utp.socket -> Unix.sockaddr -> unit);
+    Callback.register "utp_on_sendto" (on_sendto : Utp.context -> Unix.sockaddr -> Utp.buffer -> unit)
 end
 
 let main () =
