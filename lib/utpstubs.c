@@ -43,14 +43,6 @@
     fprintf (stderr, "\n"); \
   } while (0);
 
-typedef struct {
-  int sockets;
-} utp_context_userdata;
-
-typedef struct {
-  int closed;
-} utp_userdata;
-
 #define Utp_context_val(v) ((utp_context *) v)
 #define Val_utp_context(c) ((value) c)
 #define Utp_socket_val(v) ((utp_socket *) v)
@@ -77,7 +69,6 @@ static uint64 on_read (utp_callback_arguments* a)
 static uint64 on_state_change (utp_callback_arguments *a)
 {
   CAMLparam0 ();
-  utp_context_userdata *u;
   value *cb;
   static value *on_connect_fun = NULL;
   static value *on_writable_fun = NULL;
@@ -100,8 +91,6 @@ static uint64 on_state_change (utp_callback_arguments *a)
     on_close_fun = caml_named_value ("utp_on_close");
   }
 
-  u = utp_context_get_userdata (a->context);
-
   switch (a->state) {
     case UTP_STATE_CONNECT:
       cb = on_connect_fun;
@@ -113,8 +102,7 @@ static uint64 on_state_change (utp_callback_arguments *a)
       cb = on_eof_fun;
       break;
     case UTP_STATE_DESTROYING:
-      u->sockets --;
-      UTP_DEBUG ("destroying socket (%d)", u->sockets);
+      UTP_DEBUG ("destroying socket");
       cb = on_close_fun;
       break;
     default:
@@ -172,8 +160,6 @@ static uint64 on_accept (utp_callback_arguments *a)
 {
   CAMLparam0 ();
   CAMLlocal2 (addr, val);
-  utp_context_userdata *u;
-  utp_userdata *su;
   union sock_addr_union sock_addr;
   socklen_param_type sock_addr_len;
   static value *on_accept_fun = NULL;
@@ -182,14 +168,9 @@ static uint64 on_accept (utp_callback_arguments *a)
     on_accept_fun = caml_named_value ("utp_on_accept");
   }
 
-  u = utp_context_get_userdata (a->context);
   sock_addr_len = sizeof (struct sockaddr_in);
   memcpy (&sock_addr.s_inet, (struct sockaddr_in *) a->address, sock_addr_len);
   addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
-  su = caml_stat_alloc (sizeof (utp_userdata));
-  su->closed = 0;
-  utp_set_userdata (a->socket, su);
-  u->sockets ++;
   caml_callback3 (*on_accept_fun, Val_utp_context (a->context), Val_utp_socket (a->socket), addr);
 
   CAMLreturn (0);
@@ -203,12 +184,7 @@ static uint64 on_firewall (utp_callback_arguments *a)
 CAMLprim value stub_utp_close (value socket)
 {
   CAMLparam1 (socket);
-  utp_userdata *u;
-  u = utp_get_userdata (Utp_socket_val (socket));
-  if (u->closed == 0) {
-    utp_close (Utp_socket_val (socket));
-    u->closed = 1;
-  }
+  utp_close (Utp_socket_val (socket));
   CAMLreturn (Val_unit);
 }
 
@@ -216,12 +192,8 @@ CAMLprim value stub_utp_init (value unit)
 {
   CAMLparam1 (unit);
   utp_context *context;
-  utp_context_userdata *u;
 
   context = utp_init (2);
-  u = caml_stat_alloc (sizeof (utp_context_userdata));
-  u->sockets = 0;
-  utp_context_set_userdata (context, u);
   utp_set_callback (context, UTP_ON_READ, on_read);
   utp_set_callback (context, UTP_ON_STATE_CHANGE, on_state_change);
   utp_set_callback (context, UTP_SENDTO, on_sendto);
@@ -265,21 +237,10 @@ CAMLprim value stub_utp_create_socket (value ctx)
   CAMLparam1 (ctx);
   CAMLlocal1 (val);
   utp_socket *socket;
-  utp_userdata *u;
-  utp_context_userdata *su;
-
   socket = utp_create_socket (Utp_context_val (ctx));
-
-  if (!socket) {
+  if (socket == NULL) {
     caml_failwith ("utp_create_socket");
   }
-
-  u = caml_stat_alloc (sizeof (utp_userdata));
-  u->closed = 0;
-  utp_set_userdata (socket, u);
-  su = utp_context_get_userdata (Utp_context_val (ctx));
-  su->sockets ++;
-
   CAMLreturn (Val_utp_socket (socket));
 }
 
@@ -289,14 +250,11 @@ CAMLprim value stub_utp_connect (value sock, value addr)
   union sock_addr_union sock_addr;
   socklen_param_type addr_len;
   int res;
-
   get_sockaddr (addr, &sock_addr, &addr_len);
   res = utp_connect (Utp_socket_val (sock), &sock_addr.s_gen, addr_len);
-
   if (res < 0) {
     caml_failwith ("utp_connect");
   }
-
   CAMLreturn (Val_unit);
 }
 
@@ -318,5 +276,12 @@ CAMLprim value stub_utp_set_debug (value context, value v)
 {
   CAMLparam2 (context, v);
   utp_context_set_option (Utp_context_val (context), UTP_LOG_DEBUG, Bool_val (v));
+  CAMLreturn (Val_unit);
+}
+
+CAMLprim value stub_utp_destroy (value v)
+{
+  CAMLparam1 (v);
+  utp_destroy (Utp_context_val (v));
   CAMLreturn (Val_unit);
 }

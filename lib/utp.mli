@@ -40,3 +40,4 @@ val close: socket -> unit
 val process_udp: context -> Unix.sockaddr -> buffer -> int -> int -> bool
 val check_timeouts: context -> unit
 val issue_deferred_acks: context -> unit
+val destroy: context -> unit

@@ -109,6 +109,7 @@ module Utp_lwt : sig
   val read: socket -> bytes Lwt.t
   val write: socket -> bytes -> int -> int -> unit Lwt.t
   val close: socket -> unit Lwt.t
+  val destroy: context -> unit Lwt.t
 end = struct
   exception Closed
   exception Timed_out
@@ -315,6 +316,9 @@ end = struct
       end
     in
     Lwt_mutex.with_lock sock.write_mutex (fun () -> loop off len)
+
+  let destroy ctx =
+    Lwt.fail (Failure "TODO")
 
   let () =
     Callback.register "utp_on_error" (on_error : Utp.socket -> Utp.error -> unit);
