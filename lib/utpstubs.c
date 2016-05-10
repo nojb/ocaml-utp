@@ -45,22 +45,19 @@
 
 static int last_num = 0;
 
+static value *on_error_fun = NULL;
+static value *on_read_fun = NULL;
+static value *on_connect_fun = NULL;
+static value *on_writable_fun = NULL;
+static value *on_eof_fun = NULL;
+static value *on_close_fun = NULL;
+
 typedef struct {
+  int num;
   int finalized;
   int sockets;
-  int num;
-
-  // context callbacks
   value on_sendto;
   value on_accept;
-
-  // socket callbacks
-  value on_error;
-  value on_read;
-  value on_connect;
-  value on_writable;
-  value on_eof;
-  value on_close;
 } utp_context_userdata;
 
 typedef struct {
@@ -79,24 +76,6 @@ static void free_utp_context_userdata (utp_context_userdata *u)
   }
   if (u->on_accept) {
     caml_remove_generational_global_root (&(u->on_accept));
-  }
-  if (u->on_error) {
-    caml_remove_generational_global_root (&(u->on_error));
-  }
-  if (u->on_read) {
-    caml_remove_generational_global_root (&(u->on_read));
-  }
-  if (u->on_connect) {
-    caml_remove_generational_global_root (&(u->on_connect));
-  }
-  if (u->on_writable) {
-    caml_remove_generational_global_root (&(u->on_writable));
-  }
-  if (u->on_eof) {
-    caml_remove_generational_global_root (&(u->on_eof));
-  }
-  if (u->on_close) {
-    caml_remove_generational_global_root (&(u->on_close));
   }
   free (u);
 }
@@ -199,14 +178,16 @@ static uint64 on_read (utp_callback_arguments* a)
   CAMLparam0 ();
   CAMLlocal1 (ba);
   utp_userdata *u;
-  utp_context_userdata *cu;
+
+  if (on_read_fun == NULL) {
+    on_read_fun = caml_named_value ("utp_on_read");
+  }
 
   u = utp_get_userdata (a->socket);
-  cu = utp_context_get_userdata (a->context);
 
-  if (cu->on_read && u->val) {
+  if (u->val) {
     ba = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
-    caml_callback2 (cu->on_read, u->val, ba);
+    caml_callback2 (*on_read_fun, u->val, ba);
   }
 
   utp_read_drained (a->socket);
@@ -219,32 +200,49 @@ static uint64 on_state_change (utp_callback_arguments *a)
   CAMLparam0 ();
   utp_context_userdata *cu;
   utp_userdata *u;
-  value cb = 0;
+  value *cb;
+
+  if (on_connect_fun == NULL) {
+    on_connect_fun = caml_named_value ("utp_on_connect");
+  }
+
+  if (on_writable_fun == NULL) {
+    on_writable_fun = caml_named_value ("utp_on_writable");
+  }
+
+  if (on_eof_fun == NULL) {
+    on_eof_fun = caml_named_value ("utp_on_eof");
+  }
+
+  if (on_close_fun == NULL) {
+    on_close_fun = caml_named_value ("on_close_fun");
+  }
 
   cu = utp_context_get_userdata (a->context);
   u = utp_get_userdata (a->socket);
 
   switch (a->state) {
     case UTP_STATE_CONNECT:
-      cb = cu->on_connect;
+      cb = on_connect_fun;
       break;
     case UTP_STATE_WRITABLE:
-      cb = cu->on_writable;
+      cb = on_writable_fun;
       break;
     case UTP_STATE_EOF:
-      cb = cu->on_eof;
+      cb = on_eof_fun;
       break;
     case UTP_STATE_DESTROYING:
       caml_remove_generational_global_root (&(u->val));
-      cb = cu->on_close;
+      cb = on_close_fun;
       break;
     default:
       UTP_DEBUG ("unknown state change: %d", a->state);
+      cb = NULL;
       break;
   }
 
-  if (cb && u->val) {
-    caml_callback (cb, u->val);
+  if (u->val && cb) {
+    caml_callback (*cb, u->val);
     if (a->state == UTP_STATE_DESTROYING) {
       u->val = 0;
       cu->sockets --;
@@ -253,22 +251,6 @@ static uint64 on_state_change (utp_callback_arguments *a)
         free_utp_context_userdata (cu);
       }
     }
-  }
-
-  CAMLreturn (0);
-}
-
-static uint64 on_error (utp_callback_arguments *a)
-{
-  CAMLparam0 ();
-  utp_userdata *u;
-  utp_context_userdata *cu;
-
-  u = utp_get_userdata (a->socket);
-  cu = utp_context_get_userdata (a->context);
-
-  if (cu->on_error && u->val) {
-    caml_callback2 (cu->on_error, u->val, Val_int (a->error_code));
   }
 
   CAMLreturn (0);
@@ -290,6 +272,24 @@ static uint64 on_sendto (utp_callback_arguments *a)
     addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
     buf = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
     caml_callback2 (u->on_sendto, addr, buf);
+  }
+
+  CAMLreturn (0);
+}
+
+static uint64 on_error (utp_callback_arguments *a)
+{
+  CAMLparam0 ();
+  utp_userdata *u;
+
+  if (on_error_fun == NULL) {
+    on_error_fun = caml_named_value ("utp_on_error");
+  }
+
+  u = utp_get_userdata (a->socket);
+
+  if (u->val) {
+    caml_callback2 (*on_error_fun, u->val, Val_int (a->error_code));
   }
 
   CAMLreturn (0);
@@ -361,24 +361,6 @@ CAMLprim value stub_utp_set_callback (value ctx, value cbnum, value fun)
     case 1:
       cb = &(u->on_accept);
       break;
-    case 2:
-      cb = &(u->on_error);
-      break;
-    case 3:
-      cb = &(u->on_read);
-      break;
-    case 4:
-      cb = &(u->on_connect);
-      break;
-    case 5:
-      cb = &(u->on_writable);
-      break;
-    case 6:
-      cb = &(u->on_eof);
-      break;
-    case 7:
-      cb = &(u->on_close);
-      break;
   }
 
   if (*cb) {
@@ -405,12 +387,6 @@ CAMLprim value stub_utp_init (value unit)
   u->num = last_num ++;
   u->on_sendto = 0;
   u->on_accept = 0;
-  u->on_error = 0;
-  u->on_read = 0;
-  u->on_connect = 0;
-  u->on_writable = 0;
-  u->on_eof = 0;
-  u->on_close = 0;
   val = alloc_utp_context (context);
   utp_context_set_userdata (context, u);
   utp_set_callback (context, UTP_ON_READ, on_read);

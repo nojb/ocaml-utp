@@ -411,13 +411,7 @@ end = struct
     let id = Utp.init () in
     let mut = Lwt_mutex.create () in
     let accept = Lwt_condition.create () in
-    Utp.set_callback id Utp.ON_READ on_read;
-    Utp.set_callback id Utp.ON_WRITABLE on_writable;
-    Utp.set_callback id Utp.ON_CONNECT on_connect;
-    Utp.set_callback id Utp.ON_CLOSE on_close;
-    Utp.set_callback id Utp.ON_EOF on_eof;
     Utp.set_callback id Utp.ON_ACCEPT (on_accept accept);
-    Utp.set_callback id Utp.ON_ERROR on_error;
     Utp.set_callback id Utp.ON_SENDTO (on_sendto mut fd);
     let _ = Lwt.join [read_loop fd id; periodic_loop id] in
     {fd; id; accept}
@@ -461,6 +455,14 @@ end = struct
       end
     in
     Lwt_mutex.with_lock sock.write_mutex (fun () -> loop off len)
+
+  let () =
+    Callback.register "utp_on_error" on_error;
+    Callback.register "utp_on_read" on_read;
+    Callback.register "utp_on_connect" on_connect;
+    Callback.register "utp_on_writable" on_writable;
+    Callback.register "utp_on_eof" on_eof;
+    Callback.register "utp_on_close" on_close
 end
 
 let main () =

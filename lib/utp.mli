@@ -34,12 +34,6 @@ type error =
 type _ callback =
   | ON_SENDTO : (Unix.sockaddr -> Lwt_bytes.t -> unit) callback
   | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) callback
-  | ON_ERROR : (socket -> error -> unit) callback
-  | ON_READ : (socket -> Lwt_bytes.t -> unit) callback
-  | ON_CONNECT : (socket -> unit) callback
-  | ON_WRITABLE : (socket -> unit) callback
-  | ON_EOF : (socket -> unit) callback
-  | ON_CLOSE : (socket -> unit) callback
 
 val init: unit -> context
 val set_callback: context -> 'a callback -> 'a -> unit
