@@ -472,8 +472,6 @@ let main () =
   if not !o_listen && (!o_remote_port = 0 || !o_remote_address = "") then
     raise Exit;
 
-  (* let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_DGRAM 0 in *)
-
   lookup !o_local_address !o_local_port >>= fun addr ->
 
   let ctx = Utp_lwt.init addr in
@@ -497,41 +495,6 @@ let main () =
       echo_loop ()
   | true ->
       lookup !o_local_address !o_local_port >>= fun addr ->
-      (* Lwt_unix.bind fd addr; *)
-      (* let incoming = Hashtbl.create 0 in *)
-      (* let mut = Lwt_mutex.create () in *)
-      (* let on_read sock buf = *)
-      (*   debug "on_read"; *)
-      (*   let id = Hashtbl.find incoming sock in *)
-      (*   let buf = Lwt_bytes.to_bytes buf in *)
-      (*   let _ = *)
-      (*     Lwt_mutex.with_lock mut (fun () -> *)
-      (*         really_debug "Received %d bytes from #%d:" (Bytes.length buf) id; *)
-      (*         Lwt_unix.write Lwt_unix.stdout buf 0 (Bytes.length buf) *)
-      (*       ) *)
-      (*   in *)
-      (*   () *)
-      (* in *)
-      (* let on_eof sock = *)
-      (*   debug "on_eof"; *)
-      (*   let id = Hashtbl.find incoming sock in *)
-      (*   debug "Socket #%d eof'd" id; *)
-      (*   Utp.close sock *)
-      (* in *)
-      (* let on_close sock = *)
-      (*   (\* Gc.compact (); *\) *)
-      (*   debug "on_close"; *)
-      (*   let id = Hashtbl.find incoming sock in *)
-      (*   debug "Socket #%d (%d) closed" id (Utp.get_id sock); *)
-      (*   Hashtbl.remove incoming sock *)
-      (* in *)
-      (* let id = ref (-1) in *)
-      (* let on_accept sock addr = *)
-      (*   debug "on_accept"; *)
-      (*   incr id; *)
-      (*   Hashtbl.add incoming sock !id; *)
-      (*   debug "Connection #%d accepted from %s" !id (string_of_sockaddr addr); *)
-      (* in *)
       let rec loop () =
         Utp_lwt.accept ctx >>= fun (addr, sock) ->
         let _ =
