@@ -498,13 +498,13 @@ let main () =
       let rec loop () =
         Utp_lwt.accept ctx >>= fun (addr, sock) ->
         let _ =
-          let rec loop () =
-            Lwt.catch
+          let rec loop: 'a. 'a -> _ Lwt.t = fun _ ->
+            Lwt.try_bind
               (fun () ->
                  Utp_lwt.read sock >>= fun bytes ->
-                 Lwt_unix.write Lwt_unix.stdout bytes 0 (Bytes.length bytes) >>= fun _ ->
-                 loop ()
+                 Lwt_unix.write Lwt_unix.stdout bytes 0 (Bytes.length bytes)
               )
+              loop
               (function
                 | End_of_file ->
                     debug "Socket eof'd";
