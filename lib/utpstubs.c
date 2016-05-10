@@ -58,112 +58,23 @@ typedef struct {
   int closed;
 } utp_userdata;
 
-#define Utp_context_val(v) (*(utp_context **) (Data_custom_val (v)))
-
-static void finalize_utp_context (value v)
-{
-  utp_context_userdata *u;
-  u = utp_context_get_userdata (Utp_context_val (v));
-  UTP_DEBUG ("finalize_utp_context (%ld)", u->num);
-  if (u->sockets == 0) {
-    utp_destroy (Utp_context_val (v));
-    free (u);
-  } else {
-    u->finalized = 1;
-  }
-}
-
-static intnat hash_utp_context (value v)
-{
-  utp_context_userdata *u;
-  u = utp_context_get_userdata (Utp_context_val (v));
-  return u->num;
-}
-
-static struct custom_operations utp_context_custom_ops = {
-  .identifier = "utp context",
-  .finalize = finalize_utp_context,
-  .compare = custom_compare_default,
-  .hash = hash_utp_context,
-  .serialize = custom_serialize_default,
-  .deserialize = custom_deserialize_default
-};
-
-static value alloc_utp_context (utp_context *context)
-{
-  CAMLparam0 ();
-  CAMLlocal1 (v);
-  v = caml_alloc_custom (&utp_context_custom_ops, sizeof (utp_context *), 0, 1);
-  Utp_context_val (v) = context;
-  CAMLreturn (v);
-}
-
-#define Utp_socket_val(v) (*(utp_socket **) (Data_custom_val (v)))
-
-static void finalize_utp_socket (value v)
-{
-  utp_userdata *u;
-  u = utp_get_userdata (Utp_socket_val (v));
-  UTP_DEBUG ("finalize_utp_socket (%ld)", u->num);
-  free (u);
-}
-
-static int compare_utp_socket (value v1, value v2)
-{
-  utp_userdata *u1, *u2;
-  u1 = utp_get_userdata (Utp_socket_val (v1));
-  u2 = utp_get_userdata (Utp_socket_val (v2));
-  if (u1->num < u2->num) {
-    return -1;
-  }
-  if (u1->num > u2->num) {
-    return 1;
-  }
-  return 0;
-}
-
-static intnat hash_utp_socket (value v)
-{
-  utp_userdata *u;
-  u = utp_get_userdata (Utp_socket_val (v));
-  return u->num;
-}
-
-static struct custom_operations utp_socket_custom_ops = {
-  .identifier = "utp socket",
-  .finalize = finalize_utp_socket,
-  .compare = compare_utp_socket,
-  .hash = hash_utp_socket,
-  .serialize = custom_serialize_default,
-  .deserialize = custom_deserialize_default
-};
-
-static value alloc_utp_socket (utp_socket *socket)
-{
-  CAMLparam0 ();
-  CAMLlocal1 (v);
-  v = caml_alloc_custom (&utp_socket_custom_ops, sizeof (utp_socket *), 0, 1);
-  Utp_socket_val (v) = socket;
-  CAMLreturn (v);
-}
+#define Utp_context_val(v) ((utp_context *) v)
+#define Val_utp_context(c) ((value) c)
+#define Utp_socket_val(v) ((utp_socket *) v)
+#define Val_utp_socket(s) ((value) s)
 
 static uint64 on_read (utp_callback_arguments* a)
 {
   CAMLparam0 ();
   CAMLlocal1 (ba);
-  utp_userdata *u;
   static value *on_read_fun = NULL;
 
   if (on_read_fun == NULL) {
     on_read_fun = caml_named_value ("utp_on_read");
   }
 
-  u = utp_get_userdata (a->socket);
-
-  if (u->val) {
-    ba = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
-    caml_callback2 (*on_read_fun, u->val, ba);
-  }
+  ba = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
+  caml_callback2 (*on_read_fun, Val_utp_socket (a->socket), ba);
 
   utp_read_drained (a->socket);
 
@@ -174,7 +85,6 @@ static uint64 on_state_change (utp_callback_arguments *a)
 {
   CAMLparam0 ();
   utp_context_userdata *cu;
-  utp_userdata *u;
   static value *on_connect_fun = NULL;
   static value *on_writable_fun = NULL;
   static value *on_eof_fun = NULL;
@@ -198,7 +108,6 @@ static uint64 on_state_change (utp_callback_arguments *a)
   }
 
   cu = utp_context_get_userdata (a->context);
-  u = utp_get_userdata (a->socket);
 
   switch (a->state) {
     case UTP_STATE_CONNECT:
@@ -211,7 +120,6 @@ static uint64 on_state_change (utp_callback_arguments *a)
       cb = on_eof_fun;
       break;
     case UTP_STATE_DESTROYING:
-      caml_remove_generational_global_root (&(u->val));
       cb = on_close_fun;
       break;
     default:
@@ -220,10 +128,9 @@ static uint64 on_state_change (utp_callback_arguments *a)
       break;
   }
 
-  if (u->val && cb) {
-    caml_callback (*cb, u->val);
+  if (cb) {
+    caml_callback (*cb, Val_utp_socket (a->socket));
     if (a->state == UTP_STATE_DESTROYING) {
-      u->val = 0;
       cu->sockets --;
       if (cu->sockets == 0 && cu->finalized) {
         utp_destroy (a->context);
@@ -241,19 +148,17 @@ static uint64 on_sendto (utp_callback_arguments *a)
   CAMLlocal2 (addr, buf);
   union sock_addr_union sock_addr;
   socklen_param_type sock_addr_len;
-  utp_context_userdata *u;
   static value *on_sendto_fun = NULL;
 
   if (on_sendto_fun == NULL) {
     on_sendto_fun = caml_named_value ("utp_on_sendto");
   }
 
-  u = utp_context_get_userdata (a->context);
   sock_addr_len = sizeof (struct sockaddr_in);
   memcpy (&sock_addr.s_inet, (struct sockaddr_in *) a->address, sock_addr_len);
   addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
   buf = caml_ba_alloc_dims (CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, (void *) a->buf, a->len);
-  caml_callback3 (*on_sendto_fun, u->val, addr, buf);
+  caml_callback3 (*on_sendto_fun, Val_utp_context (a->context), addr, buf);
 
   CAMLreturn (0);
 }
@@ -261,19 +166,11 @@ static uint64 on_sendto (utp_callback_arguments *a)
 static uint64 on_error (utp_callback_arguments *a)
 {
   CAMLparam0 ();
-  utp_userdata *u;
   static value *on_error_fun = NULL;
-
   if (on_error_fun == NULL) {
     on_error_fun = caml_named_value ("utp_on_error");
   }
-
-  u = utp_get_userdata (a->socket);
-
-  if (u->val) {
-    caml_callback2 (*on_error_fun, u->val, Val_int (a->error_code));
-  }
-
+  caml_callback2 (*on_error_fun, Val_utp_socket (a->socket), Val_int (a->error_code));
   CAMLreturn (0);
 }
 
@@ -303,12 +200,10 @@ static uint64 on_accept (utp_callback_arguments *a)
   addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
   su = caml_stat_alloc (sizeof (utp_userdata));
   su->num = last_num ++;
-  su->val = alloc_utp_socket (a->socket);
   su->closed = 0;
-  caml_register_generational_global_root (&(su->val));
   utp_set_userdata (a->socket, su);
   u->sockets ++;
-  caml_callback3 (*on_accept_fun, u->val, su->val, addr);
+  caml_callback3 (*on_accept_fun, Val_utp_context (a->context), Val_utp_socket (a->socket), addr);
 
   CAMLreturn (0);
 }
@@ -341,8 +236,6 @@ CAMLprim value stub_utp_init (value unit)
   u->finalized = 0;
   u->sockets = 0;
   u->num = last_num ++;
-  u->val = alloc_utp_context (context);
-  caml_register_generational_global_root (&(u->val));
   utp_context_set_userdata (context, u);
   utp_set_callback (context, UTP_ON_READ, on_read);
   utp_set_callback (context, UTP_ON_STATE_CHANGE, on_state_change);
@@ -352,7 +245,7 @@ CAMLprim value stub_utp_init (value unit)
   utp_set_callback (context, UTP_ON_ACCEPT, on_accept);
   utp_set_callback (context, UTP_ON_FIREWALL, on_firewall);
 
-  CAMLreturn (u->val);
+  CAMLreturn (Val_utp_context (context));
 }
 
 CAMLprim value stub_utp_process_udp (value context, value addr, value buf, value off, value len)
@@ -398,14 +291,12 @@ CAMLprim value stub_utp_create_socket (value ctx)
 
   u = caml_stat_alloc (sizeof (utp_userdata));
   u->num = last_num ++;
-  u->val = alloc_utp_socket (socket);
   u->closed = 0;
-  caml_register_generational_global_root (&(u->val));
   utp_set_userdata (socket, u);
   su = utp_context_get_userdata (Utp_context_val (ctx));
   su->sockets ++;
 
-  CAMLreturn (u->val);
+  CAMLreturn (Val_utp_socket (socket));
 }
 
 CAMLprim value stub_utp_connect (value sock, value addr)
@@ -444,12 +335,4 @@ CAMLprim value stub_utp_set_debug (value context, value v)
   CAMLparam2 (context, v);
   utp_context_set_option (Utp_context_val (context), UTP_LOG_DEBUG, Bool_val (v));
   CAMLreturn (Val_unit);
-}
-
-CAMLprim value stub_utp_get_id (value v)
-{
-  CAMLparam1 (v);
-  utp_userdata *u;
-  u = utp_get_userdata (Utp_socket_val (v));
-  CAMLreturn (Val_int (u->num));
 }
