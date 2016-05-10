@@ -282,9 +282,10 @@ end = struct
     {
       id: Utp.context;
       fd: Lwt_unix.file_descr;
-      sockets: (Utp.socket, socket) Hashtbl.t;
       accept: (Unix.sockaddr * socket) Lwt_condition.t;
     }
+
+  let sockets = Hashtbl.create 0
 
   let read_loop fd id =
     let buf = Lwt_bytes.create 4096 in
@@ -308,7 +309,7 @@ end = struct
     Utp.check_timeouts id;
     periodic_loop id
 
-  let on_read sockets id buf =
+  let on_read id buf =
     debug "on_read";
     let sock = Hashtbl.find sockets id in
     let buf = Lwt_bytes.to_bytes buf in
@@ -318,17 +319,17 @@ end = struct
     | exception Lwt_sequence.Empty ->
         ignore (Lwt_sequence.add_r buf sock.buffers)
 
-  let on_writable sockets id =
+  let on_writable id =
     debug "on_writable";
     let sock = Hashtbl.find sockets id in
     Lwt_condition.signal sock.writable ()
 
-  let on_connect sockets id =
+  let on_connect id =
     debug "on_connect";
     let sock = Hashtbl.find sockets id in
     Lwt.wakeup_later sock.connected ()
 
-  let on_close sockets id =
+  let on_close id =
     debug "on_close";
     let sock = Hashtbl.find sockets id in
     Hashtbl.remove sockets id;
@@ -336,7 +337,7 @@ end = struct
     Lwt.wakeup_later_exn sock.connected Closed
     (* Gc.compact () *)
 
-  let on_eof sockets id =
+  let on_eof id =
     debug "on_eof";
     let sock : socket = Hashtbl.find sockets id in
     Utp.close sock.id;
@@ -371,7 +372,7 @@ end = struct
       write_buffer;
     }
 
-  let on_accept sockets accept id addr =
+  let on_accept accept id addr =
     debug "on_accept";
     let sock = create_socket id in
     Hashtbl.add sockets id sock;
@@ -387,7 +388,7 @@ end = struct
     in
     ()
 
-  let on_error sockets id error =
+  let on_error id error =
     debug "on_error";
     let sock = Hashtbl.find sockets id in
     let exn =
@@ -408,24 +409,23 @@ end = struct
     let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_DGRAM 0 in
     Lwt_unix.bind fd addr;
     let id = Utp.init () in
-    let sockets = Hashtbl.create 0 in
     let mut = Lwt_mutex.create () in
     let accept = Lwt_condition.create () in
-    Utp.set_callback id Utp.ON_READ (on_read sockets);
-    Utp.set_callback id Utp.ON_WRITABLE (on_writable sockets);
-    Utp.set_callback id Utp.ON_CONNECT (on_connect sockets);
-    Utp.set_callback id Utp.ON_CLOSE (on_close sockets);
-    Utp.set_callback id Utp.ON_EOF (on_eof sockets);
-    Utp.set_callback id Utp.ON_ACCEPT (on_accept sockets accept);
-    Utp.set_callback id Utp.ON_ERROR (on_error sockets);
+    Utp.set_callback id Utp.ON_READ on_read;
+    Utp.set_callback id Utp.ON_WRITABLE on_writable;
+    Utp.set_callback id Utp.ON_CONNECT on_connect;
+    Utp.set_callback id Utp.ON_CLOSE on_close;
+    Utp.set_callback id Utp.ON_EOF on_eof;
+    Utp.set_callback id Utp.ON_ACCEPT (on_accept accept);
+    Utp.set_callback id Utp.ON_ERROR on_error;
     Utp.set_callback id Utp.ON_SENDTO (on_sendto mut fd);
     let _ = Lwt.join [read_loop fd id; periodic_loop id] in
-    {fd; id; sockets; accept}
+    {fd; id; accept}
 
   let connect ctx addr =
     let id = Utp.create_socket ctx.id in
     let sock = create_socket id in
-    Hashtbl.add ctx.sockets id sock;
+    Hashtbl.add sockets id sock;
     Utp.connect sock.id addr;
     sock.on_connected >>= fun () -> Lwt.return sock
 
