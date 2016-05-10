@@ -293,10 +293,10 @@ end = struct
     let buf = Lwt_bytes.create 4096 in
     let rec loop () =
       Lwt_bytes.recvfrom fd buf 0 (Lwt_bytes.length buf) [] >>= fun (n, addr) ->
-      debug "received packet";
+      really_debug "received packet";
       if Utp.process_udp id addr buf 0 n then begin
         if not (Lwt_unix.readable fd) then begin
-          debug "issue deferred acks";
+          really_debug "issue deferred acks";
           Utp.issue_deferred_acks id
         end;
       end else begin
@@ -382,7 +382,7 @@ end = struct
     Lwt_condition.signal ctx.accept (addr, sock)
 
   let on_sendto id addr buf =
-    debug "on_sendto";
+    really_debug "on_sendto";
     let ctx = Hashtbl.find contexts id in
     let buf = Lwt_bytes.to_bytes buf in
     let _ =
@@ -517,7 +517,8 @@ let main () =
                 | End_of_file ->
                     debug "Socket eof'd";
                     Lwt.return_unit
-                | e -> Lwt.fail e
+                | e ->
+                    Lwt.fail e
               )
           in
           loop ()

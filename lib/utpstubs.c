@@ -194,7 +194,7 @@ static uint64 on_state_change (utp_callback_arguments *a)
   }
 
   if (on_close_fun == NULL) {
-    on_close_fun = caml_named_value ("on_close_fun");
+    on_close_fun = caml_named_value ("utp_on_close");
   }
 
   cu = utp_context_get_userdata (a->context);
