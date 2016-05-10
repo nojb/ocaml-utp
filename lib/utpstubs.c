@@ -132,11 +132,11 @@ static struct custom_operations utp_context_custom_ops = {
 
 static value alloc_utp_context (utp_context *context)
 {
-  CAMLparam0();
-  CAMLlocal1(v);
+  CAMLparam0 ();
+  CAMLlocal1 (v);
   v = caml_alloc_custom (&utp_context_custom_ops, sizeof (utp_context *), 0, 1);
   Utp_context_val (v) = context;
-  CAMLreturn(v);
+  CAMLreturn (v);
 }
 
 #define Utp_socket_val(v) (*(utp_socket **) (Data_custom_val (v)))
@@ -187,11 +187,11 @@ static struct custom_operations utp_socket_custom_ops = {
 
 static value alloc_utp_socket (utp_socket *socket)
 {
-  CAMLparam0();
-  CAMLlocal1(v);
+  CAMLparam0 ();
+  CAMLlocal1 (v);
   v = caml_alloc_custom (&utp_socket_custom_ops, sizeof (utp_socket *), 0, 1);
   Utp_socket_val (v) = socket;
-  CAMLreturn(v);
+  CAMLreturn (v);
 }
 
 static uint64 on_read (utp_callback_arguments* a)
