@@ -43,17 +43,13 @@
     fprintf (stderr, "\n"); \
   } while (0);
 
-static intnat last_num = 0;
-
 typedef struct {
-  intnat num;
   int finalized;
   int sockets;
   value val;
 } utp_context_userdata;
 
 typedef struct {
-  intnat num;
   value val;
   int closed;
 } utp_userdata;
@@ -199,7 +195,6 @@ static uint64 on_accept (utp_callback_arguments *a)
   memcpy (&sock_addr.s_inet, (struct sockaddr_in *) a->address, sock_addr_len);
   addr = alloc_sockaddr (&sock_addr, sock_addr_len, 0);
   su = caml_stat_alloc (sizeof (utp_userdata));
-  su->num = last_num ++;
   su->closed = 0;
   utp_set_userdata (a->socket, su);
   u->sockets ++;
@@ -235,7 +230,6 @@ CAMLprim value stub_utp_init (value unit)
   u = caml_stat_alloc (sizeof (utp_context_userdata));
   u->finalized = 0;
   u->sockets = 0;
-  u->num = last_num ++;
   utp_context_set_userdata (context, u);
   utp_set_callback (context, UTP_ON_READ, on_read);
   utp_set_callback (context, UTP_ON_STATE_CHANGE, on_state_change);
@@ -290,7 +284,6 @@ CAMLprim value stub_utp_create_socket (value ctx)
   }
 
   u = caml_stat_alloc (sizeof (utp_userdata));
-  u->num = last_num ++;
   u->closed = 0;
   utp_set_userdata (socket, u);
   su = utp_context_get_userdata (Utp_context_val (ctx));
