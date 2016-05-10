@@ -44,7 +44,6 @@
   } while (0);
 
 typedef struct {
-  int finalized;
   int sockets;
 } utp_context_userdata;
 
@@ -126,7 +125,7 @@ static uint64 on_state_change (utp_callback_arguments *a)
     caml_callback (*cb, Val_utp_socket (a->socket));
     if (a->state == UTP_STATE_DESTROYING) {
       cu->sockets --;
-      if (cu->sockets == 0 && cu->finalized) {
+      if (cu->sockets == 0) {
         utp_destroy (a->context);
         free (cu);
       }
@@ -226,7 +225,6 @@ CAMLprim value stub_utp_init (value unit)
 
   context = utp_init (2);
   u = caml_stat_alloc (sizeof (utp_context_userdata));
-  u->finalized = 0;
   u->sockets = 0;
   utp_context_set_userdata (context, u);
   utp_set_callback (context, UTP_ON_READ, on_read);
