@@ -48,6 +48,7 @@ static int last_num = 0;
 typedef struct {
   int finalized;
   int sockets;
+  int num;
 
   // context callbacks
   value on_sendto;
@@ -113,11 +114,18 @@ static void finalize_utp_context (value v)
   }
 }
 
+static intnat hash_utp_context (value v)
+{
+  utp_context_userdata *u;
+  u = utp_context_get_userdata (Utp_context_val (v));
+  return u->num;
+}
+
 static struct custom_operations utp_context_custom_ops = {
   .identifier = "utp context",
   .finalize = finalize_utp_context,
   .compare = custom_compare_default,
-  .hash = custom_hash_default,
+  .hash = hash_utp_context,
   .serialize = custom_serialize_default,
   .deserialize = custom_deserialize_default
 };
@@ -394,6 +402,7 @@ CAMLprim value stub_utp_init (value unit)
   u = caml_stat_alloc (sizeof (utp_context_userdata));
   u->finalized = 0;
   u->sockets = 0;
+  u->num = last_num ++;
   u->on_sendto = 0;
   u->on_accept = 0;
   u->on_error = 0;
