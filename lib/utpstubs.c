@@ -46,11 +46,9 @@
 typedef struct {
   int finalized;
   int sockets;
-  value val;
 } utp_context_userdata;
 
 typedef struct {
-  value val;
   int closed;
 } utp_userdata;
 
