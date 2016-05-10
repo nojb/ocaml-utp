@@ -125,6 +125,7 @@ end = struct
       connected: unit Lwt.u;
       on_connected: unit Lwt.t;
       closed: unit Lwt.u;
+      close: unit Lazy.t;
       on_closed: unit Lwt.t;
       eof: unit Lwt.u;
       on_eof: unit Lwt.t;
@@ -138,15 +139,28 @@ end = struct
       fd: Lwt_unix.file_descr;
       accept: (Unix.sockaddr * socket) Lwt_condition.t;
       send_mutex: Lwt_mutex.t;
+      loop: unit Lwt.t;
+      mutable sockets: int;
+      mutable destroyed: bool;
+      stop: unit Lwt.u;
     }
 
   let sockets = Hashtbl.create 5
   let contexts = Hashtbl.create 2
 
-  let read_loop fd id =
+  let safe s f x =
+    Lwt.catch f (fun e -> debug "%s: unexpected exn: %s" s (Printexc.to_string e); x)
+
+  let safe_wakeup w x =
+    try Lwt.wakeup w x with Invalid_argument _ -> ()
+
+  let safe_wakeup_exn w exn =
+    try Lwt.wakeup_exn w exn with Invalid_argument _ -> ()
+
+  let read_loop stopper fd id =
     let buf = Lwt_bytes.create 4096 in
     let rec loop () =
-      Lwt_bytes.recvfrom fd buf 0 (Lwt_bytes.length buf) [] >>= fun (n, addr) ->
+      Lwt.pick [stopper >>= (fun () -> Lwt.fail Exit); Lwt_bytes.recvfrom fd buf 0 (Lwt_bytes.length buf) []] >>= fun (n, addr) ->
       really_debug "received packet";
       if Utp.process_udp id addr buf 0 n then begin
         if not (Lwt_unix.readable fd) then begin
@@ -158,15 +172,15 @@ end = struct
       end;
       loop ()
     in
-    Lwt.catch loop (fun e -> debug "read_loop exn: %s" (Printexc.to_string e); Lwt.return_unit)
+    safe "read_loop" loop Lwt.return_unit
 
-  let periodic_loop id =
+  let periodic_loop stopper id =
     let rec loop () =
-      Lwt_unix.sleep 0.5 >>= fun () ->
+      Lwt.pick [stopper >>= (fun () -> Lwt.fail Exit); Lwt_unix.sleep 0.5] >>= fun () ->
       Utp.check_timeouts id;
       loop ()
     in
-    Lwt.catch loop (fun e -> debug "periodic_loop exn: %s" (Printexc.to_string e); Lwt.return_unit)
+    safe "periodic_loop" loop Lwt.return_unit
 
   let on_read id buf =
     really_debug "on_read";
@@ -186,20 +200,27 @@ end = struct
   let on_connect id =
     debug "on_connect";
     let sock = Hashtbl.find sockets id in
-    Lwt.wakeup_later sock.connected ()
+    Lwt.wakeup sock.connected ()
 
   let on_close id =
     debug "on_close";
     let sock = Hashtbl.find sockets id in
+    Lwt.wakeup_later sock.closed (); (* CHECK: _later is important here *)
+    safe_wakeup_exn sock.connected Closed;
     Hashtbl.remove sockets id;
-    Lwt.wakeup_later sock.closed ();
-    Lwt.wakeup_later_exn sock.connected Closed
-    (* Gc.compact () *)
+    let cid = Utp.get_context id in
+    let ctx = Hashtbl.find contexts cid in
+    ctx.sockets <- ctx.sockets - 1;
+    if ctx.sockets = 0 && ctx.destroyed then begin
+      Lwt.wakeup ctx.stop ();
+      Utp.destroy ctx.id;
+      Hashtbl.remove contexts ctx.id
+    end
 
   let on_eof id =
     debug "on_eof";
     let sock = Hashtbl.find sockets id in
-    Utp.close sock.id;
+    Lazy.force sock.close;
     Lwt.wakeup_later sock.eof ();
     Lwt_sequence.iter_node_l (fun node ->
         let w = Lwt_sequence.get node in
@@ -213,6 +234,7 @@ end = struct
     let writable = Lwt_condition.create () in
     let on_connected, connected = Lwt.wait () in
     let on_closed, closed = Lwt.wait () in
+    let close = lazy (Utp.close id) in
     let on_eof, eof = Lwt.wait () in
     let write_mutex = Lwt_mutex.create () in
     let write_buffer = Lwt_bytes.create 4096 in
@@ -224,6 +246,7 @@ end = struct
       connected;
       on_connected;
       closed;
+      close;
       on_closed;
       eof;
       on_eof;
@@ -236,6 +259,7 @@ end = struct
     let ctx = Hashtbl.find contexts id in
     let sock = create_socket sid in
     Hashtbl.add sockets sid sock;
+    ctx.sockets <- ctx.sockets + 1;
     Lwt_condition.signal ctx.accept (addr, sock)
 
   let on_sendto id addr buf =
@@ -272,20 +296,28 @@ end = struct
     let send_mutex = Lwt_mutex.create () in
     let accept = Lwt_condition.create () in
     let id = Utp.init () in
-    let ctx = {id; fd; accept; send_mutex} in
+    let starter, start = Lwt.wait () in
+    let stopper, stop = Lwt.wait () in
+    let stopper = stopper >>= fun () -> debug "stopping"; Lwt.return_unit in
+    let loop =
+      let safe_close () = safe "loop" (fun () -> Lwt_unix.close fd) Lwt.return_unit in
+      starter >>= fun () -> Lwt.join [read_loop stopper fd id; periodic_loop stopper id] >>= safe_close
+    in
+    let ctx = {id; fd; accept; send_mutex; loop; sockets = 0; destroyed = false; stop} in
     Hashtbl.add contexts id ctx;
-    let _ = Lwt.join [read_loop fd id; periodic_loop id] >>= fun () -> Lwt_unix.close fd in
+    Lwt.wakeup start ();
     ctx
 
   let connect ctx addr =
     let id = Utp.create_socket ctx.id in
     let sock = create_socket id in
     Hashtbl.add sockets id sock;
+    ctx.sockets <- ctx.sockets + 1;
     Utp.connect sock.id addr;
     sock.on_connected >>= fun () -> Lwt.return sock
 
   let close (sock : socket) =
-    Utp.close sock.id;
+    Lazy.force sock.close;
     sock.on_closed
 
   let accept ctx =
@@ -318,7 +350,14 @@ end = struct
     Lwt_mutex.with_lock sock.write_mutex (fun () -> loop off len)
 
   let destroy ctx =
-    Lwt.fail (Failure "TODO")
+    if ctx.sockets = 0 then begin
+      Lwt.wakeup ctx.stop ();
+      Utp.destroy ctx.id;
+      Hashtbl.remove contexts ctx.id
+    end else begin
+      ctx.destroyed <- true;
+    end;
+    ctx.loop
 
   let () =
     Callback.register "utp_on_error" (on_error : Utp.socket -> Utp.error -> unit);
@@ -347,43 +386,47 @@ let main () =
   (* if !o_debug >= 2 then *)
   (*   Utp.set_debug ctx true; *)
 
-  match !o_listen with
-  | false ->
-      lookup !o_remote_address !o_remote_port >>= fun addr ->
-      Utp_lwt.connect ctx addr >>= fun sock ->
-      let read_buf = Bytes.create !o_buf_size in
-      let rec echo_loop () =
-        match%lwt Lwt_unix.read Lwt_unix.stdin read_buf 0 (Bytes.length read_buf) with
-        | 0 ->
-            debug "Read EOF from stdin; closing socket";
-            Utp_lwt.close sock
-        | n ->
-            Utp_lwt.write sock read_buf 0 n >>= echo_loop
-      in
-      echo_loop ()
-  | true ->
-      lookup !o_local_address !o_local_port >>= fun addr ->
-      Utp_lwt.accept ctx >>= fun (addr, sock) ->
-      let rec loop: 'a. 'a -> _ Lwt.t = fun _ ->
-        Lwt.try_bind
-          (fun () ->
-             Utp_lwt.read sock >>= fun bytes ->
-             Lwt_unix.write Lwt_unix.stdout bytes 0 (Bytes.length bytes)
-          )
-          loop
-          (function
-            | End_of_file ->
-                debug "got End_of_file";
-                Lwt.return_unit
-            | e ->
-                Lwt.fail e
-          )
-      in
-      loop () >>= fun () -> Utp_lwt.close sock
+  let t =
+    match !o_listen with
+    | false ->
+        lookup !o_remote_address !o_remote_port >>= fun addr ->
+        Utp_lwt.connect ctx addr >>= fun sock ->
+        let read_buf = Bytes.create !o_buf_size in
+        let rec echo_loop () =
+          match%lwt Lwt_unix.read Lwt_unix.stdin read_buf 0 (Bytes.length read_buf) with
+          | 0 ->
+              debug "Read EOF from stdin; closing socket";
+              Utp_lwt.close sock
+          | n ->
+              Utp_lwt.write sock read_buf 0 n >>= echo_loop
+        in
+        echo_loop ()
+    | true ->
+        lookup !o_local_address !o_local_port >>= fun addr ->
+        Utp_lwt.accept ctx >>= fun (addr, sock) ->
+        let rec loop: 'a. 'a -> _ Lwt.t = fun _ ->
+          Lwt.try_bind
+            (fun () ->
+               Utp_lwt.read sock >>= fun bytes ->
+               Lwt_unix.write Lwt_unix.stdout bytes 0 (Bytes.length bytes)
+            )
+            loop
+            (function
+              | End_of_file ->
+                  debug "got End_of_file";
+                  Lwt.return_unit
+              | e ->
+                  Lwt.fail e
+            )
+        in
+        loop () >>= fun () -> Utp_lwt.close sock
+  in
+  t >>= fun () -> Utp_lwt.destroy ctx
 
 let () =
   try
-    Lwt_main.run (main ())
+    Lwt_main.run (main ());
+    Gc.compact ()
   with
   | Exit ->
       Arg.usage spec usage_msg

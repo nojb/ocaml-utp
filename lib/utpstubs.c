@@ -245,10 +245,20 @@ CAMLprim value stub_utp_set_debug (value context, value v)
   CAMLreturn (Val_unit);
 }
 
+CAMLprim value stub_utp_get_context (value v)
+{
+  CAMLparam1 (v);
+  utp_context *c;
+
+  c = utp_get_context (Utp_socket_val (v));
+  CAMLreturn (Val_utp_context (c));
+}
+
 CAMLprim value stub_utp_destroy (value v)
 {
   CAMLparam1 (v);
 
+  UTP_DEBUG ("stub_utp_destroy");
   utp_destroy (Utp_context_val (v));
   CAMLreturn (Val_unit);
 }
