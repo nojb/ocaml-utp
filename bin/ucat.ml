@@ -95,10 +95,15 @@ let string_of_sockaddr = function
       Printf.sprintf "%s:%d" (Unix.string_of_inet_addr ip) port
 
 module Utp_lwt : sig
-  exception Closed
-  exception Timed_out
-  exception Connection_reset
-  exception Connection_refused
+  type error =
+    | End_of_file
+    | Closed
+    | Timed_out
+    | Connection_reset
+    | Connection_refused
+    | General of string
+
+  exception Error of error
 
   type socket
   type context
@@ -111,10 +116,15 @@ module Utp_lwt : sig
   val close: socket -> unit Lwt.t
   val destroy: context -> unit Lwt.t
 end = struct
-  exception Closed
-  exception Timed_out
-  exception Connection_reset
-  exception Connection_refused
+  type error =
+    | End_of_file
+    | Closed
+    | Timed_out
+    | Connection_reset
+    | Connection_refused
+    | General of string
+
+  exception Error of error
 
   type socket =
     {
@@ -206,7 +216,7 @@ end = struct
     debug "on_close";
     let sock = Hashtbl.find sockets id in
     Lwt.wakeup_later sock.closed (); (* CHECK: _later is important here *)
-    safe_wakeup_exn sock.connected Closed;
+    safe_wakeup_exn sock.connected (Error Closed);
     Hashtbl.remove sockets id;
     let cid = Utp.get_context id in
     let ctx = Hashtbl.find contexts cid in
@@ -225,7 +235,7 @@ end = struct
     Lwt_sequence.iter_node_l (fun node ->
         let w = Lwt_sequence.get node in
         Lwt_sequence.remove node;
-        Lwt.wakeup_exn w End_of_file
+        Lwt.wakeup_exn w (Error End_of_file)
       ) sock.readers
 
   let create_socket id =
@@ -278,9 +288,9 @@ end = struct
     let sock = Hashtbl.find sockets id in
     let exn =
       match error with
-      | Utp.ECONNREFUSED -> Connection_refused
-      | Utp.ECONNRESET -> Connection_reset
-      | Utp.ETIMEDOUT -> Timed_out
+      | Utp.ECONNREFUSED -> Error Connection_refused
+      | Utp.ECONNRESET -> Error Connection_reset
+      | Utp.ETIMEDOUT -> Error Timed_out
     in
     Lwt_sequence.iter_node_l (fun node ->
         let w = Lwt_sequence.get node in
@@ -412,7 +422,7 @@ let main () =
             )
             loop
             (function
-              | End_of_file ->
+              | Utp_lwt.Error Utp_lwt.End_of_file ->
                   debug "got End_of_file";
                   Lwt.return_unit
               | e ->
