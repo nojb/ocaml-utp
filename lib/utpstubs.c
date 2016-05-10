@@ -77,12 +77,12 @@ static uint64 on_read (utp_callback_arguments* a)
 static uint64 on_state_change (utp_callback_arguments *a)
 {
   CAMLparam0 ();
-  utp_context_userdata *cu;
+  utp_context_userdata *u;
+  value *cb;
   static value *on_connect_fun = NULL;
   static value *on_writable_fun = NULL;
   static value *on_eof_fun = NULL;
   static value *on_close_fun = NULL;
-  value *cb;
 
   if (on_connect_fun == NULL) {
     on_connect_fun = caml_named_value ("utp_on_connect");
@@ -100,7 +100,7 @@ static uint64 on_state_change (utp_callback_arguments *a)
     on_close_fun = caml_named_value ("utp_on_close");
   }
 
-  cu = utp_context_get_userdata (a->context);
+  u = utp_context_get_userdata (a->context);
 
   switch (a->state) {
     case UTP_STATE_CONNECT:
@@ -113,6 +113,8 @@ static uint64 on_state_change (utp_callback_arguments *a)
       cb = on_eof_fun;
       break;
     case UTP_STATE_DESTROYING:
+      u->sockets --;
+      UTP_DEBUG ("destroying socket (%d)", u->sockets);
       cb = on_close_fun;
       break;
     default:
@@ -123,13 +125,6 @@ static uint64 on_state_change (utp_callback_arguments *a)
 
   if (cb) {
     caml_callback (*cb, Val_utp_socket (a->socket));
-    if (a->state == UTP_STATE_DESTROYING) {
-      cu->sockets --;
-      if (cu->sockets == 0) {
-        utp_destroy (a->context);
-        free (cu);
-      }
-    }
   }
 
   CAMLreturn (0);

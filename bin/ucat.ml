@@ -99,7 +99,6 @@ module Utp_lwt : sig
   exception Timed_out
   exception Connection_reset
   exception Connection_refused
-  exception End_of_file
 
   type socket
   type context
@@ -115,7 +114,6 @@ end = struct
   exception Timed_out
   exception Connection_reset
   exception Connection_refused
-  exception End_of_file
 
   type socket =
     {
@@ -159,15 +157,18 @@ end = struct
       end;
       loop ()
     in
-    loop ()
+    Lwt.catch loop (fun e -> debug "read_loop exn: %s" (Printexc.to_string e); Lwt.return_unit)
 
-  let rec periodic_loop id =
-    Lwt_unix.sleep 0.5 >>= fun () ->
-    Utp.check_timeouts id;
-    periodic_loop id
+  let periodic_loop id =
+    let rec loop () =
+      Lwt_unix.sleep 0.5 >>= fun () ->
+      Utp.check_timeouts id;
+      loop ()
+    in
+    Lwt.catch loop (fun e -> debug "periodic_loop exn: %s" (Printexc.to_string e); Lwt.return_unit)
 
   let on_read id buf =
-    debug "on_read";
+    really_debug "on_read";
     let sock = Hashtbl.find sockets id in
     let buf = Lwt_bytes.to_bytes buf in
     match Lwt_sequence.take_l sock.readers with
@@ -177,7 +178,7 @@ end = struct
         ignore (Lwt_sequence.add_r buf sock.buffers)
 
   let on_writable id =
-    debug "on_writable";
+    really_debug "on_writable";
     let sock = Hashtbl.find sockets id in
     Lwt_condition.signal sock.writable ()
 
@@ -267,12 +268,12 @@ end = struct
   let init addr =
     let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_DGRAM 0 in
     Lwt_unix.bind fd addr;
-    let id = Utp.init () in
     let send_mutex = Lwt_mutex.create () in
     let accept = Lwt_condition.create () in
-    let ctx = {fd; id; accept; send_mutex} in
+    let id = Utp.init () in
+    let ctx = {id; fd; accept; send_mutex} in
     Hashtbl.add contexts id ctx;
-    let _ = Lwt.join [read_loop fd id; periodic_loop id] in
+    let _ = Lwt.join [read_loop fd id; periodic_loop id] >>= fun () -> Lwt_unix.close fd in
     ctx
 
   let connect ctx addr =
@@ -358,29 +359,23 @@ let main () =
       echo_loop ()
   | true ->
       lookup !o_local_address !o_local_port >>= fun addr ->
-      let rec loop () =
-        Utp_lwt.accept ctx >>= fun (addr, sock) ->
-        let _ =
-          let rec loop: 'a. 'a -> _ Lwt.t = fun _ ->
-            Lwt.try_bind
-              (fun () ->
-                 Utp_lwt.read sock >>= fun bytes ->
-                 Lwt_unix.write Lwt_unix.stdout bytes 0 (Bytes.length bytes)
-              )
-              loop
-              (function
-                | End_of_file ->
-                    debug "Socket eof'd";
-                    Lwt.return_unit
-                | e ->
-                    Lwt.fail e
-              )
-          in
-          loop ()
-        in
-        loop ()
+      Utp_lwt.accept ctx >>= fun (addr, sock) ->
+      let rec loop: 'a. 'a -> _ Lwt.t = fun _ ->
+        Lwt.try_bind
+          (fun () ->
+             Utp_lwt.read sock >>= fun bytes ->
+             Lwt_unix.write Lwt_unix.stdout bytes 0 (Bytes.length bytes)
+          )
+          loop
+          (function
+            | End_of_file ->
+                debug "got End_of_file";
+                Lwt.return_unit
+            | e ->
+                Lwt.fail e
+          )
       in
-      loop ()
+      loop () >>= fun () -> Utp_lwt.close sock
 
 let () =
   try
@@ -389,6 +384,6 @@ let () =
   | Exit ->
       Arg.usage spec usage_msg
   | Failure s ->
-      Printf.printf "Fatal error: %s\n%!" s;
+      Printf.eprintf "Fatal error: %s\n%!" s;
   | e ->
-      Printf.printf "Fatal error: %s\n%!" (Printexc.to_string e)
+      Printf.eprintf "Fatal error: %s\n%!" (Printexc.to_string e)
