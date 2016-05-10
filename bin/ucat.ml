@@ -207,10 +207,16 @@ end = struct
     sock.state <- Connected;
     Lwt.wakeup sock.connected ()
 
+  let cancel_readers sock exn =
+    let readers = Lwt_sequence.fold_l (fun x l -> x :: l) sock.readers [] in
+    List.iter (fun w -> Lwt.wakeup_exn w exn) readers;
+    Lwt_sequence.iter_node_l Lwt_sequence.remove sock.readers
+
   let on_close id =
     debug "on_close";
     let sock = Hashtbl.find sockets id in
     sock.state <- Closed;
+    cancel_readers sock End_of_file;
     Lwt.wakeup_later sock.closed (); (* CHECK: _later is important here *)
     safe_wakeup_exn sock.connected (Failure "connect: socket closed");
     Hashtbl.remove sockets id;
@@ -228,10 +234,7 @@ end = struct
     let sock = Hashtbl.find sockets id in
     sock.state <- Eof;
     Lwt.wakeup_later sock.eof ();
-    debug "readers: %d" (Lwt_sequence.length sock.readers);
-    let readers = Lwt_sequence.fold_l (fun x l -> x :: l) sock.readers [] in
-    List.iter (fun w -> Lwt.wakeup_exn w End_of_file) readers;
-    Lwt_sequence.iter_node_l Lwt_sequence.remove sock.readers
+    cancel_readers sock End_of_file
 
   let create_socket id state =
     let buffers = Lwt_sequence.create () in
@@ -277,14 +280,6 @@ end = struct
     in
     ()
 
-  let safe_close sock =
-    match sock.state with
-    | Connected | Eof ->
-        sock.state <- Closing;
-        Utp.close sock.id
-    | state ->
-        debug "Closing while %s" (string_of_state state)
-
   let on_error id error =
     debug "on_error";
     let sock = Hashtbl.find sockets id in
@@ -292,14 +287,10 @@ end = struct
       match error with
       | Utp.ECONNREFUSED -> "connect: connection refused"
       | Utp.ECONNRESET -> "connection reset"
-      | Utp.ETIMEDOUT -> "timeout"
+      | Utp.ETIMEDOUT -> "connection timeout"
     in
     let exn = Failure err in
-    Lwt_sequence.iter_node_l (fun node ->
-        let w = Lwt_sequence.get node in
-        Lwt_sequence.remove node;
-        Lwt.wakeup_exn w exn
-      ) sock.readers;
+    cancel_readers sock exn;
     Lwt.wakeup_exn sock.connected exn
     (* Lwt_condition.broadcast_exn sock.writable exn *)
 
@@ -330,7 +321,13 @@ end = struct
     sock.on_connected >>= fun () -> Lwt.return sock
 
   let close (sock : socket) =
-    safe_close sock;
+    begin match sock.state with
+    | Connected | Eof ->
+        sock.state <- Closing;
+        Utp.close sock.id
+    | state ->
+        debug "Closing while %s" (string_of_state state)
+    end;
     sock.on_closed
 
   let accept ctx =
