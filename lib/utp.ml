@@ -31,12 +31,7 @@ type error =
   | ECONNRESET
   | ETIMEDOUT
 
-type _ callback =
-  | ON_SENDTO : (Unix.sockaddr -> Lwt_bytes.t -> unit) callback
-  | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) callback
-
 external init: unit -> context = "stub_utp_init"
-external set_callback: context -> 'a callback -> 'a -> unit = "stub_utp_set_callback"
 external set_debug: context -> bool -> unit = "stub_utp_set_debug"
 external create_socket: context -> socket = "stub_utp_create_socket"
 external write: socket -> buffer -> int -> int -> int = "stub_utp_write"

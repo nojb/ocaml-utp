@@ -31,12 +31,7 @@ type error =
   | ECONNRESET
   | ETIMEDOUT
 
-type _ callback =
-  | ON_SENDTO : (Unix.sockaddr -> Lwt_bytes.t -> unit) callback
-  | ON_ACCEPT : (socket -> Unix.sockaddr -> unit) callback
-
 val init: unit -> context
-val set_callback: context -> 'a callback -> 'a -> unit
 val set_debug: context -> bool -> unit
 val create_socket: context -> socket
 val connect: socket -> Unix.sockaddr -> unit

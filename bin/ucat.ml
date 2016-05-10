@@ -283,9 +283,11 @@ end = struct
       id: Utp.context;
       fd: Lwt_unix.file_descr;
       accept: (Unix.sockaddr * socket) Lwt_condition.t;
+      send_mutex: Lwt_mutex.t;
     }
 
-  let sockets = Hashtbl.create 0
+  let sockets = Hashtbl.create 5
+  let contexts = Hashtbl.create 2
 
   let read_loop fd id =
     let buf = Lwt_bytes.create 4096 in
@@ -372,18 +374,20 @@ end = struct
       write_buffer;
     }
 
-  let on_accept accept id addr =
+  let on_accept id sid addr =
     debug "on_accept";
-    let sock = create_socket id in
-    Hashtbl.add sockets id sock;
-    Lwt_condition.signal accept (addr, sock)
+    let ctx = Hashtbl.find contexts id in
+    let sock = create_socket sid in
+    Hashtbl.add sockets sid sock;
+    Lwt_condition.signal ctx.accept (addr, sock)
 
-  let on_sendto mut fd addr buf =
+  let on_sendto id addr buf =
     debug "on_sendto";
+    let ctx = Hashtbl.find contexts id in
     let buf = Lwt_bytes.to_bytes buf in
     let _ =
-      Lwt_mutex.with_lock mut (fun () ->
-          Lwt_unix.sendto fd buf 0 (Bytes.length buf) [] addr
+      Lwt_mutex.with_lock ctx.send_mutex (fun () ->
+          Lwt_unix.sendto ctx.fd buf 0 (Bytes.length buf) [] addr
         )
     in
     ()
@@ -409,18 +413,20 @@ end = struct
     let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_DGRAM 0 in
     Lwt_unix.bind fd addr;
     let id = Utp.init () in
-    let mut = Lwt_mutex.create () in
+    let send_mutex = Lwt_mutex.create () in
     let accept = Lwt_condition.create () in
-    Utp.set_callback id Utp.ON_ACCEPT (on_accept accept);
-    Utp.set_callback id Utp.ON_SENDTO (on_sendto mut fd);
+    let ctx = {fd; id; accept; send_mutex} in
+    Hashtbl.add contexts id ctx;
     let _ = Lwt.join [read_loop fd id; periodic_loop id] in
-    {fd; id; accept}
+    ctx
 
   let connect ctx addr =
     let id = Utp.create_socket ctx.id in
     let sock = create_socket id in
     Hashtbl.add sockets id sock;
+    debug "foo";
     Utp.connect sock.id addr;
+    debug "bar";
     sock.on_connected >>= fun () -> Lwt.return sock
 
   let close (sock : socket) =
@@ -462,7 +468,9 @@ end = struct
     Callback.register "utp_on_connect" on_connect;
     Callback.register "utp_on_writable" on_writable;
     Callback.register "utp_on_eof" on_eof;
-    Callback.register "utp_on_close" on_close
+    Callback.register "utp_on_close" on_close;
+    Callback.register "utp_on_accept" on_accept;
+    Callback.register "utp_on_sendto" on_sendto
 end
 
 let main () =
