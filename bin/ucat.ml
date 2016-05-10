@@ -95,16 +95,6 @@ let string_of_sockaddr = function
       Printf.sprintf "%s:%d" (Unix.string_of_inet_addr ip) port
 
 module Utp_lwt : sig
-  type error =
-    | End_of_file
-    | Closed
-    | Timed_out
-    | Connection_reset
-    | Connection_refused
-    | General of string
-
-  exception Error of error
-
   type socket
   type context
 
@@ -116,15 +106,19 @@ module Utp_lwt : sig
   val close: socket -> unit Lwt.t
   val destroy: context -> unit Lwt.t
 end = struct
-  type error =
-    | End_of_file
+  type state =
+    | Connecting
+    | Connected
+    | Eof
+    | Closing
     | Closed
-    | Timed_out
-    | Connection_reset
-    | Connection_refused
-    | General of string
 
-  exception Error of error
+  let string_of_state = function
+    | Connecting -> "Connecting"
+    | Connected -> "Connected"
+    | Eof -> "Eof"
+    | Closing -> "Closing"
+    | Closed -> "Closed"
 
   type socket =
     {
@@ -135,12 +129,12 @@ end = struct
       connected: unit Lwt.u;
       on_connected: unit Lwt.t;
       closed: unit Lwt.u;
-      close: unit Lazy.t;
       on_closed: unit Lwt.t;
       eof: unit Lwt.u;
       on_eof: unit Lwt.t;
       write_mutex: Lwt_mutex.t;
       write_buffer: Lwt_bytes.t;
+      mutable state: state;
     }
 
   type context =
@@ -210,13 +204,15 @@ end = struct
   let on_connect id =
     debug "on_connect";
     let sock = Hashtbl.find sockets id in
+    sock.state <- Connected;
     Lwt.wakeup sock.connected ()
 
   let on_close id =
     debug "on_close";
     let sock = Hashtbl.find sockets id in
+    sock.state <- Closed;
     Lwt.wakeup_later sock.closed (); (* CHECK: _later is important here *)
-    safe_wakeup_exn sock.connected (Error Closed);
+    safe_wakeup_exn sock.connected (Failure "connect: socket closed");
     Hashtbl.remove sockets id;
     let cid = Utp.get_context id in
     let ctx = Hashtbl.find contexts cid in
@@ -230,21 +226,19 @@ end = struct
   let on_eof id =
     debug "on_eof";
     let sock = Hashtbl.find sockets id in
-    Lazy.force sock.close;
+    sock.state <- Eof;
     Lwt.wakeup_later sock.eof ();
-    Lwt_sequence.iter_node_l (fun node ->
-        let w = Lwt_sequence.get node in
-        Lwt_sequence.remove node;
-        Lwt.wakeup_exn w (Error End_of_file)
-      ) sock.readers
+    debug "readers: %d" (Lwt_sequence.length sock.readers);
+    let readers = Lwt_sequence.fold_l (fun x l -> x :: l) sock.readers [] in
+    List.iter (fun w -> Lwt.wakeup_exn w End_of_file) readers;
+    Lwt_sequence.iter_node_l Lwt_sequence.remove sock.readers
 
-  let create_socket id =
+  let create_socket id state =
     let buffers = Lwt_sequence.create () in
     let readers = Lwt_sequence.create () in
     let writable = Lwt_condition.create () in
     let on_connected, connected = Lwt.wait () in
     let on_closed, closed = Lwt.wait () in
-    let close = lazy (Utp.close id) in
     let on_eof, eof = Lwt.wait () in
     let write_mutex = Lwt_mutex.create () in
     let write_buffer = Lwt_bytes.create 4096 in
@@ -256,18 +250,18 @@ end = struct
       connected;
       on_connected;
       closed;
-      close;
       on_closed;
       eof;
       on_eof;
       write_mutex;
       write_buffer;
+      state;
     }
 
   let on_accept id sid addr =
     debug "on_accept";
     let ctx = Hashtbl.find contexts id in
-    let sock = create_socket sid in
+    let sock = create_socket sid Connected in
     Hashtbl.add sockets sid sock;
     ctx.sockets <- ctx.sockets + 1;
     Lwt_condition.signal ctx.accept (addr, sock)
@@ -283,15 +277,24 @@ end = struct
     in
     ()
 
+  let safe_close sock =
+    match sock.state with
+    | Connected | Eof ->
+        sock.state <- Closing;
+        Utp.close sock.id
+    | state ->
+        debug "Closing while %s" (string_of_state state)
+
   let on_error id error =
     debug "on_error";
     let sock = Hashtbl.find sockets id in
-    let exn =
+    let err =
       match error with
-      | Utp.ECONNREFUSED -> Error Connection_refused
-      | Utp.ECONNRESET -> Error Connection_reset
-      | Utp.ETIMEDOUT -> Error Timed_out
+      | Utp.ECONNREFUSED -> "connect: connection refused"
+      | Utp.ECONNRESET -> "connection reset"
+      | Utp.ETIMEDOUT -> "timeout"
     in
+    let exn = Failure err in
     Lwt_sequence.iter_node_l (fun node ->
         let w = Lwt_sequence.get node in
         Lwt_sequence.remove node;
@@ -320,24 +323,29 @@ end = struct
 
   let connect ctx addr =
     let id = Utp.create_socket ctx.id in
-    let sock = create_socket id in
+    let sock = create_socket id Connecting in
     Hashtbl.add sockets id sock;
     ctx.sockets <- ctx.sockets + 1;
     Utp.connect sock.id addr;
     sock.on_connected >>= fun () -> Lwt.return sock
 
   let close (sock : socket) =
-    Lazy.force sock.close;
+    safe_close sock;
     sock.on_closed
 
   let accept ctx =
     Lwt_condition.wait ctx.accept
 
   let read sock =
-    if Lwt_sequence.is_empty sock.readers && not (Lwt_sequence.is_empty sock.buffers) then
-      Lwt.return (Lwt_sequence.take_l sock.buffers)
-    else
-      Lwt.add_task_r sock.readers
+    match sock.state, Lwt_sequence.is_empty sock.buffers with
+    | _, false ->
+        Lwt.return (Lwt_sequence.take_l sock.buffers)
+    | (Connected | Closing), true ->
+        Lwt.add_task_r sock.readers
+    | (Closed | Eof), true ->
+        Lwt.fail End_of_file
+    | _, true ->
+        Lwt.fail (Failure "read: not connected")
 
   let rec write sock buf off len =
     let rec loop off len =
@@ -422,10 +430,11 @@ let main () =
             )
             loop
             (function
-              | Utp_lwt.Error Utp_lwt.End_of_file ->
+              | End_of_file ->
                   debug "got End_of_file";
-                  Lwt.return_unit
+                  Utp_lwt.close sock
               | e ->
+                  debug "foo: %s" (Printexc.to_string e);
                   Lwt.fail e
             )
         in
