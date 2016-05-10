@@ -341,7 +341,7 @@ end = struct
 
   let on_eof id =
     debug "on_eof";
-    let sock : socket = Hashtbl.find sockets id in
+    let sock = Hashtbl.find sockets id in
     Utp.close sock.id;
     Lwt.wakeup_later sock.eof ();
     Lwt_sequence.iter_node_l (fun node ->
@@ -440,7 +440,7 @@ end = struct
     else
       Lwt.add_task_r sock.readers
 
-  let rec write (sock : socket) buf off len =
+  let rec write sock buf off len =
     let rec loop off len =
       if len = 0 then
         Lwt.return_unit
