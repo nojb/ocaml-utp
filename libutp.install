@@ -1,14 +1,14 @@
 lib: [
   "lib/META" {"META"}
+  "libutp/libutp.a" {"libutp.a"}
   "lib/utp.mli" {"utp.mli"}
   "lib/utp.cmi" {"utp.cmi"}
   "lib/utp.cma" {"utp.cma"}
   "lib/utp.cmxa" {"utp.cmxa"}
-  "lib/libutp.a" {"libutp.a"}
-  "lib/libutpstubs.a" {"libutpstubs.a"}
 ]
 bin: [
   "bin/ucat" {"ucat"}
+  "bin/ucat.opt" {"ucat.opt"}
 ]
 doc: [
   "README.md" {"README.md"}

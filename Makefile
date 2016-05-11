@@ -10,25 +10,19 @@ LWT_DIR = `$(OCAMLFIND) query lwt`
 
 all: ucat ucat.opt $(LIB_DIR)utp.cma $(LIB_DIR)utp.cmxa
 
-LIBUTP_OBJS = \
-	$(LIBUTP_DIR)utp_internal.o \
-	$(LIBUTP_DIR)utp_utils.o \
-	$(LIBUTP_DIR)utp_hash.o \
-	$(LIBUTP_DIR)utp_callbacks.o \
-	$(LIBUTP_DIR)utp_api.o \
-	$(LIBUTP_DIR)utp_packedsockaddr.o
-
-$(LIBUTP_DIR)%.o: $(LIBUTP_DIR)%.cpp
+.PHONY: $(LIBUTP_DIR)libutp.a
+$(LIBUTP_DIR)libutp.a: $(LIB_DIR)utpstubs.o
 	$(MAKE) -C $(LIBUTP_DIR) $(notdir $@)
+	ar qv $@ $<
 
 $(LIB_DIR)utpstubs.o: $(LIB_DIR)utpstubs.c
 	$(CC) -I $(LIBUTP_DIR) -I $(STDLIB_DIR) -Wall -o $@ -c $<
 
-$(LIB_DIR)utp.cma: $(LIB_DIR)utp.cmo $(LIBUTP_OBJS) $(LIB_DIR)utpstubs.o
-	$(OCAMLC) -bin-annot -a -custom -o $@ $^ -cclib -lstdc++
+$(LIB_DIR)utp.cma: $(LIBUTP_DIR)libutp.a $(LIB_DIR)utp.cmo
+	$(OCAMLC) -bin-annot -a -custom -o $@ unix.cma bigarray.cma -cclib -lutp $(LIB_DIR)utp.cmo -cclib -lstdc++
 
-$(LIB_DIR)utp.cmxa: $(LIB_DIR)utp.cmx $(LIBUTP_OBJS) $(LIB_DIR)utpstubs.o
-	$(OCAMLOPT) -bin-annot -a -o $@ $^ -cclib -lstdc++
+$(LIB_DIR)utp.cmxa: $(LIBUTP_DIR)libutp.a $(LIB_DIR)utp.cmx
+	$(OCAMLOPT) -bin-annot -a -o $@ -cclib -lunix -cclib -lbigarray -cclib -lutp $(LIB_DIR)utp.cmx -cclib -lstdc++
 
 $(LIB_DIR)utp.cmo: $(LIB_DIR)utp.mli $(LIB_DIR)utp.ml
 	$(OCAMLC) -g -bin-annot -I $(LIB_DIR) -o $@ -c $^
@@ -40,12 +34,14 @@ doc: $(LIB_DIR)utp.mli
 	$(OCAMLDOC) -package lwt.unix -d doc -html -colorize-code -css-style style.css $^
 
 ucat: $(LIB_DIR)utp.cma $(BIN_DIR)ucat.ml
-	$(OCAMLC) -g -bin-annot -I $(LWT_DIR) -I $(LIB_DIR) unix.cma bigarray.cma lwt.cma lwt-unix.cma -o $@ $^
+	$(OCAMLC) -g -bin-annot -I $(LWT_DIR) -I $(LIB_DIR) -ccopt -L$(LIB_DIR) -ccopt -L$(LIBUTP_DIR) \
+		$(LIB_DIR)utp.cma lwt.cma lwt-unix.cma $(BIN_DIR)ucat.ml -o $@
 
 ucat.opt: $(LIB_DIR)utp.cmxa $(BIN_DIR)ucat.ml
-	$(OCAMLOPT) -g -bin-annot -I $(LWT_DIR) -I $(LIB_DIR) unix.cmxa bigarray.cmxa lwt.cmxa lwt-unix.cmxa -o $@ $^
+	$(OCAMLOPT) -g -bin-annot -I $(LWT_DIR) -I $(LIB_DIR) -ccopt -L$(LIB_DIR) -ccopt -L$(LIBUTP_DIR) \
+		$(LIB_DIR)utp.cmxa unix.cmxa bigarray.cmxa lwt.cmxa lwt-unix.cmxa $(BIN_DIR)ucat.ml -o $@
 
-install: $(LIB_DIR)utp.cma $(LIB_DIR)utp.cmxa $(LIBUTP_OBJS) $(LIBUTP_DIR)utpstubs.o $(LIB_DIR)META
+install: $(LIB_DIR)utp.cma $(LIB_DIR)utp.cmxa $(LIBUTP_DIR)libutp.a $(LIB_DIR)META
 	$(OCAMLFIND) install utp $^
 
 uninstall:
@@ -68,4 +64,4 @@ gh-pages: doc
 	git -C .gh-pages push origin gh-pages -f
 	rm -rf .gh-pages
 
-.PHONY: libutp clean install uninstall doc
+.PHONY: clean install uninstall doc
