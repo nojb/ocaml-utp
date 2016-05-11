@@ -9,7 +9,7 @@ OCAMLDOC = ocamldoc
 STDLIB_DIR = `$(OCAMLC) -where`
 LWT_DIR = `$(OCAMLFIND) query lwt`
 
-all: ucat ucat.opt utp.cma utp.cmxa utp-lwt.cma utp-lwt.cmxa utp.a libutp.a utp-lwt.a
+all: ucat ucat.opt
 
 $(LIB_DIR)utpstubs.o: $(LIB_DIR)utpstubs.c
 	$(CC) -I $(LIBUTP_DIR) -I $(STDLIB_DIR) -Wall -fPIC -o $@ -c $<

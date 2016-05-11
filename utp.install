@@ -1,5 +1,5 @@
 lib: [
-  "lib/META" {"META"}
+  "META" {"META"}
   "libutp.a" {"libutp.a"}
   "lib/utp.mli" {"utp.mli"}
   "lib/utp.cmi" {"utp.cmi"}
@@ -8,6 +8,8 @@ lib: [
   "utp-lwt.cma" {"utp-lwt.cma"}
   "utp-lwt.a" {"utp-lwt.a"}
   "utp-lwt.cmxa" {"utp-lwt.cmxa"}
+  "lib/utp_lwt.cmi" {"utp_lwt.cmi"}
+  "lib/utp_lwt.mli" {"utp_lwt.mli"}
   "utp.a" {"utp.a"}
 ]
 bin: [
