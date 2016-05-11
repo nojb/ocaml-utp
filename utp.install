@@ -1,14 +1,18 @@
 lib: [
   "lib/META" {"META"}
-  "libutp/libutp.a" {"libutp.a"}
+  "libutp.a" {"libutp.a"}
   "lib/utp.mli" {"utp.mli"}
   "lib/utp.cmi" {"utp.cmi"}
-  "lib/utp.cma" {"utp.cma"}
-  "lib/utp.cmxa" {"utp.cmxa"}
+  "utp.cma" {"utp.cma"}
+  "utp.cmxa" {"utp.cmxa"}
+  "utp-lwt.cma" {"utp-lwt.cma"}
+  "utp-lwt.a" {"utp-lwt.a"}
+  "utp-lwt.cmxa" {"utp-lwt.cmxa"}
+  "utp.a" {"utp.a"}
 ]
 bin: [
-  "bin/ucat" {"ucat"}
-  "bin/ucat.opt" {"ucat.opt"}
+  "ucat" {"ucat"}
+  "ucat.opt" {"ucat.opt"}
 ]
 doc: [
   "README.md" {"README.md"}

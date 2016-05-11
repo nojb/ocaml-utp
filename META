@@ -1,0 +1,15 @@
+name = "utp"
+version = "0.9.0"
+description = "OCaml bindings for bitorrent/libutp"
+requires = "unix bigarray"
+archive(byte) = "utp.cma"
+archive(native) = "utp.cmxa"
+exists_if = "utp.cma"
+package "lwt" (
+ version = "0.9.0"
+ description = "Lwt integartion"
+ requires = "lwt.unix utp"
+ archive(byte) = "utp-lwt.cma"
+ archive(native) = "utp-lwt.cmxa"
+ exists_if = "utp-lwt.cma"
+)

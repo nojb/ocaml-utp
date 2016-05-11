@@ -4,25 +4,20 @@ BIN_DIR = bin/
 OCAMLFIND = ocamlfind
 OCAMLC = ocamlc
 OCAMLOPT = ocamlopt
+OCAMLMKLIB = ocamlmklib
 OCAMLDOC = ocamldoc
 STDLIB_DIR = `$(OCAMLC) -where`
 LWT_DIR = `$(OCAMLFIND) query lwt`
 
-all: ucat ucat.opt $(LIB_DIR)utp.cma $(LIB_DIR)utp.cmxa
-
-.PHONY: $(LIBUTP_DIR)libutp.a
-$(LIBUTP_DIR)libutp.a: $(LIB_DIR)utpstubs.o
-	$(MAKE) -C $(LIBUTP_DIR) $(notdir $@)
-	ar qv $@ $<
+all: ucat ucat.opt utp.cma utp.cmxa utp-lwt.cma utp-lwt.cmxa utp.a libutp.a utp-lwt.a
 
 $(LIB_DIR)utpstubs.o: $(LIB_DIR)utpstubs.c
-	$(CC) -I $(LIBUTP_DIR) -I $(STDLIB_DIR) -Wall -o $@ -c $<
+	$(CC) -I $(LIBUTP_DIR) -I $(STDLIB_DIR) -Wall -fPIC -o $@ -c $<
 
-$(LIB_DIR)utp.cma: $(LIBUTP_DIR)libutp.a $(LIB_DIR)utp.cmo
-	$(OCAMLC) -bin-annot -a -custom -o $@ unix.cma bigarray.cma -cclib -lutp $(LIB_DIR)utp.cmo -cclib -lstdc++
+LIBUTP_OBJS = utp_internal.o utp_utils.o utp_hash.o utp_callbacks.o utp_api.o utp_packedsockaddr.o
 
-$(LIB_DIR)utp.cmxa: $(LIBUTP_DIR)libutp.a $(LIB_DIR)utp.cmx
-	$(OCAMLOPT) -bin-annot -a -o $@ -cclib -lunix -cclib -lbigarray -cclib -lutp $(LIB_DIR)utp.cmx -cclib -lstdc++
+$(LIBUTP_DIR)%.o: $(LIBUTP_DIR)%.cpp
+	$(MAKE) -C $(LIBUTP_DIR) $(notdir $@)
 
 $(LIB_DIR)utp.cmo: $(LIB_DIR)utp.mli $(LIB_DIR)utp.ml
 	$(OCAMLC) -g -bin-annot -I $(LIB_DIR) -o $@ -c $^
@@ -30,27 +25,41 @@ $(LIB_DIR)utp.cmo: $(LIB_DIR)utp.mli $(LIB_DIR)utp.ml
 $(LIB_DIR)utp.cmx: $(LIB_DIR)utp.mli $(LIB_DIR)utp.ml
 	$(OCAMLOPT) -g -bin-annot -I $(LIB_DIR) -o $@ -c $^
 
-doc: $(LIB_DIR)utp.mli
-	$(OCAMLDOC) -package lwt.unix -d doc -html -colorize-code -css-style style.css $^
+$(LIB_DIR)utp_lwt.cmo: $(LIB_DIR)utp.mli $(LIB_DIR)utp_lwt.mli $(LIB_DIR)utp_lwt.ml
+	$(OCAMLC) -g -bin-annot -I $(LIB_DIR) -I $(LWT_DIR) -o $@ -c $^
 
-ucat: $(LIB_DIR)utp.cma $(BIN_DIR)ucat.ml
-	$(OCAMLC) -g -bin-annot -I $(LWT_DIR) -I $(LIB_DIR) -ccopt -L$(LIB_DIR) -ccopt -L$(LIBUTP_DIR) \
-		$(LIB_DIR)utp.cma lwt.cma lwt-unix.cma $(BIN_DIR)ucat.ml -o $@
+$(LIB_DIR)utp_lwt.cmx: $(LIB_DIR)utp.mli $(LIB_DIR)utp_lwt.mli $(LIB_DIR)utp_lwt.ml
+	$(OCAMLOPT) -g -bin-annot -I $(LIB_DIR) -I $(LWT_DIR) -o $@ -c $^
 
-ucat.opt: $(LIB_DIR)utp.cmxa $(BIN_DIR)ucat.ml
-	$(OCAMLOPT) -g -bin-annot -I $(LWT_DIR) -I $(LIB_DIR) -ccopt -L$(LIB_DIR) -ccopt -L$(LIBUTP_DIR) \
-		$(LIB_DIR)utp.cmxa unix.cmxa bigarray.cmxa lwt.cmxa lwt-unix.cmxa $(BIN_DIR)ucat.ml -o $@
+utp.cma utp.cmxa libutp.a utp.a: $(addprefix $(LIBUTP_DIR),$(LIBUTP_OBJS)) $(LIB_DIR)utpstubs.o $(LIB_DIR)utp.cmo $(LIB_DIR)utp.cmx
+	$(OCAMLMKLIB) -custom -o utp $^ -lstdc++
 
-install: $(LIB_DIR)utp.cma $(LIB_DIR)utp.cmxa $(LIBUTP_DIR)libutp.a $(LIB_DIR)META
+utp-lwt.cma: utp.cma $(LIB_DIR)utp_lwt.cmo
+	$(OCAMLC) -a -o $@ $^
+
+utp-lwt.cmxa utp-lwt.a: $(LIB_DIR)utp_lwt.cmx
+	$(OCAMLOPT) -a -o $@ $^
+
+ucat: utp-lwt.cma $(BIN_DIR)ucat.ml
+	$(OCAMLC) -g -bin-annot -I $(LWT_DIR) -I $(LIB_DIR) -ccopt -L. -o $@ unix.cma bigarray.cma lwt.cma lwt-unix.cma $^
+
+ucat.opt: utp.cmxa utp-lwt.cmxa $(BIN_DIR)ucat.ml
+	$(OCAMLOPT) -g -bin-annot -I $(LWT_DIR) -I $(LIB_DIR) -ccopt -L. -o $@ unix.cmxa bigarray.cmxa lwt.cmxa lwt-unix.cmxa $^
+
+install: utp.a libutp.a utp.cma utp.cmxa utp-lwt.cma utp-lwt.cmxa utp-lwt.a $(LIB_DIR)utp.mli $(LIB_DIR)utp_lwt.mli $(LIB_DIR)utp.cmi $(LIB_DIR)utp_lwt.cmi META
 	$(OCAMLFIND) install utp $^
 
 uninstall:
 	$(OCAMLFIND) remove utp
 
+doc: $(LIB_DIR)utp.mli $(LIB_DIR)utp_lwt.mli
+	$(OCAMLFIND) $(OCAMLDOC) -package lwt.unix -d doc -html -colorize-code -css-style style.css $^
+
 clean:
 	$(MAKE) -C libutp clean
 	rm -f $(LIB_DIR)*.cm* $(LIB_DIR)*.[oa]
 	rm -f $(BIN_DIR)*.cm* $(BIN_DIR)*.o
+	rm -f *.a *.cma *.cmxa *.so
 	rm -f ucat ucat.opt
 
 gh-pages: doc
