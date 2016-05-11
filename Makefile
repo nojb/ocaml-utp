@@ -2,43 +2,48 @@ LIBUTP_DIR = libutp/
 LIB_DIR = lib/
 BIN_DIR = bin/
 OCAMLFIND = ocamlfind
+OCAMLC = ocamlc
 OCAMLOPT = ocamlopt
-CFLAGS = -Wall -I `ocamlfind printconf stdlib`
-CC = cc
+STDLIB_DIR = `ocamlc -where`
 
-all: ucat ucat.opt $(LIB_DIR)utp.cma $(LIB_DIR)utp.cmxa $(LIB_DIR)libutpstubs.a $(LIBUTP_DIR)libutp.a
+all: ucat ucat.opt $(LIB_DIR)utp.cma $(LIB_DIR)utp.cmxa
 
-$(LIBUTP_DIR)libutp.a:
-	$(MAKE) -C $(LIBUTP_DIR) libutp.a
+LIBUTP_OBJS = \
+	$(LIBUTP_DIR)utp_internal.o \
+	$(LIBUTP_DIR)utp_utils.o \
+	$(LIBUTP_DIR)utp_hash.o \
+	$(LIBUTP_DIR)utp_callbacks.o \
+	$(LIBUTP_DIR)utp_api.o \
+	$(LIBUTP_DIR)utp_packedsockaddr.o
 
-$(LIB_DIR)utp.cma: $(LIB_DIR)utp.cmo $(LIB_DIR)libutpstubs.a $(LIBUTP_DIR)libutp.a
-	$(OCAMLFIND) ocamlc -bin-annot -a -o $@ -custom $< -cclib -lutpstubs -cclib -lutp -cclib -lstdc++
+$(LIBUTP_DIR)%.o: $(LIBUTP_DIR)%.cpp
+	$(MAKE) -C $(LIBUTP_DIR) $(notdir $@)
 
-$(LIB_DIR)utp.cmxa: $(LIB_DIR)utp.cmx $(LIB_DIR)libutpstubs.a $(LIBUTP_DIR)libutp.a
-	$(OCAMLFIND) ocamlopt -bin-annot -a -o $@ $< -cclib -lutpstubs -cclib -lutp -cclib -lstdc++
+$(LIB_DIR)utpstubs.o: $(LIB_DIR)utpstubs.c
+	$(CC) -I $(LIBUTP_DIR) -I $(STDLIB_DIR) -Wall -o $@ -c $<
+
+$(LIB_DIR)utp.cma: $(LIB_DIR)utp.cmo $(LIBUTP_OBJS) $(LIB_DIR)utpstubs.o
+	$(OCAMLC) -bin-annot -a -custom -o $@ $^ -cclib -lstdc++
+
+$(LIB_DIR)utp.cmxa: $(LIB_DIR)utp.cmx $(LIBUTP_OBJS) $(LIB_DIR)utpstubs.o
+	$(OCAMLOPT) -bin-annot -a -o $@ $^ -cclib -lstdc++
 
 $(LIB_DIR)utp.cmo: $(LIB_DIR)utp.mli $(LIB_DIR)utp.ml
-	$(OCAMLFIND) ocamlc -bin-annot -package lwt.unix -o $@ -c -I $(LIB_DIR) $^
+	$(OCAMLC) -g -bin-annot -I $(LIB_DIR) -o $@ -c $^
 
 $(LIB_DIR)utp.cmx: $(LIB_DIR)utp.mli $(LIB_DIR)utp.ml
-	$(OCAMLFIND) ocamlopt -bin-annot -package lwt.unix -o $@ -c -I $(LIB_DIR) $^
-
-$(LIB_DIR)libutpstubs.a: $(LIB_DIR)utpstubs.o
-	ar rvs $@ $^
-
-%.o: %.c
-	$(CC) -I$(LIBUTP_DIR) $(CFLAGS) -o $@ -c -I$(LIB_DIR) $<
+	$(OCAMLOPT) -g -bin-annot -I $(LIB_DIR) -o $@ -c $^
 
 doc: $(LIB_DIR)utp.mli
 	$(OCAMLFIND) ocamldoc -package lwt.unix -d doc -html -colorize-code -css-style style.css $^
 
-ucat: $(BIN_DIR)ucat.ml $(LIB_DIR)libutpstubs.a $(LIBUTP_DIR)libutp.a $(LIB_DIR)utp.cma
-	$(OCAMLFIND) ocamlc -bin-annot -linkpkg -o $@ -package lwt.unix -package lwt.ppx -g -I $(LIB_DIR) -cclib -L$(LIB_DIR) -cclib -L$(LIBUTP_DIR) utp.cma $<
+ucat: $(LIB_DIR)utp.cma $(BIN_DIR)ucat.ml
+	$(OCAMLFIND) ocamlc -g -bin-annot -linkpkg -package lwt.unix -package lwt.ppx -I $(LIB_DIR) -o $@ $^
 
-ucat.opt: $(BIN_DIR)ucat.ml $(LIB_DIR)libutpstubs.a $(LIBUTP_DIR)libutp.a $(LIB_DIR)utp.cmxa
-	$(OCAMLFIND) ocamlopt -bin-annot -linkpkg -o $@ -package lwt.unix -package lwt.ppx -g -I $(LIB_DIR) -cclib -L$(LIB_DIR) -cclib -L$(LIBUTP_DIR) utp.cmxa $<
+ucat.opt: $(LIB_DIR)utp.cmxa $(BIN_DIR)ucat.ml
+	$(OCAMLFIND) ocamlopt -g -bin-annot -linkpkg -package lwt.unix -package lwt.ppx -I $(LIB_DIR) -o $@ $^
 
-install: $(LIB_DIR)utp.cma $(LIB_DIR)utp.cmxa $(LIB_DIR)libutpstubs.a $(LIBUTP_DIR)libutp.a $(LIB_DIR)META
+install: $(LIB_DIR)utp.cma $(LIB_DIR)utp.cmxa $(LIBUTP_OBJS) $(LIBUTP_DIR)utpstubs.o $(LIB_DIR)META
 	$(OCAMLFIND) install utp $^
 
 uninstall:
