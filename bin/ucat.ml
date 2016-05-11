@@ -130,8 +130,6 @@ end = struct
       on_connected: unit Lwt.t;
       closed: unit Lwt.u;
       on_closed: unit Lwt.t;
-      eof: unit Lwt.u;
-      on_eof: unit Lwt.t;
       write_mutex: Lwt_mutex.t;
       write_buffer: Lwt_bytes.t;
       mutable state: state;
@@ -233,7 +231,6 @@ end = struct
     debug "on_eof";
     let sock = Hashtbl.find sockets id in
     sock.state <- Eof;
-    Lwt.wakeup_later sock.eof ();
     cancel_readers sock End_of_file
 
   let create_socket id state =
@@ -242,7 +239,6 @@ end = struct
     let writable = Lwt_condition.create () in
     let on_connected, connected = Lwt.wait () in
     let on_closed, closed = Lwt.wait () in
-    let on_eof, eof = Lwt.wait () in
     let write_mutex = Lwt_mutex.create () in
     let write_buffer = Lwt_bytes.create 4096 in
     {
@@ -254,8 +250,6 @@ end = struct
       on_connected;
       closed;
       on_closed;
-      eof;
-      on_eof;
       write_mutex;
       write_buffer;
       state;
