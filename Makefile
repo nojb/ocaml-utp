@@ -4,7 +4,9 @@ BIN_DIR = bin/
 OCAMLFIND = ocamlfind
 OCAMLC = ocamlc
 OCAMLOPT = ocamlopt
-STDLIB_DIR = `ocamlc -where`
+OCAMLDOC = ocamldoc
+STDLIB_DIR = `$(OCAMLC) -where`
+LWT_DIR = `$(OCAMLFIND) query lwt`
 
 all: ucat ucat.opt $(LIB_DIR)utp.cma $(LIB_DIR)utp.cmxa
 
@@ -35,13 +37,13 @@ $(LIB_DIR)utp.cmx: $(LIB_DIR)utp.mli $(LIB_DIR)utp.ml
 	$(OCAMLOPT) -g -bin-annot -I $(LIB_DIR) -o $@ -c $^
 
 doc: $(LIB_DIR)utp.mli
-	$(OCAMLFIND) ocamldoc -package lwt.unix -d doc -html -colorize-code -css-style style.css $^
+	$(OCAMLDOC) -package lwt.unix -d doc -html -colorize-code -css-style style.css $^
 
 ucat: $(LIB_DIR)utp.cma $(BIN_DIR)ucat.ml
-	$(OCAMLFIND) ocamlc -g -bin-annot -linkpkg -package lwt.unix -package lwt.ppx -I $(LIB_DIR) -o $@ $^
+	$(OCAMLC) -g -bin-annot -I $(LWT_DIR) -I $(LIB_DIR) unix.cma bigarray.cma lwt.cma lwt-unix.cma -o $@ $^
 
 ucat.opt: $(LIB_DIR)utp.cmxa $(BIN_DIR)ucat.ml
-	$(OCAMLFIND) ocamlopt -g -bin-annot -linkpkg -package lwt.unix -package lwt.ppx -I $(LIB_DIR) -o $@ $^
+	$(OCAMLOPT) -g -bin-annot -I $(LWT_DIR) -I $(LIB_DIR) unix.cmxa bigarray.cmxa lwt.cmxa lwt-unix.cmxa -o $@ $^
 
 install: $(LIB_DIR)utp.cma $(LIB_DIR)utp.cmxa $(LIBUTP_OBJS) $(LIBUTP_DIR)utpstubs.o $(LIB_DIR)META
 	$(OCAMLFIND) install utp $^

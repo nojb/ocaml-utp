@@ -82,9 +82,9 @@ let lookup addr port =
   let hints = [U.AI_FAMILY U.PF_INET; U.AI_SOCKTYPE U.SOCK_DGRAM] in
   let hints = if !o_numeric then U.AI_NUMERICHOST :: hints else hints in
   let hints = if !o_listen then U.AI_PASSIVE :: hints else hints in
-  match%lwt U.getaddrinfo addr (string_of_int port) hints with
+  U.getaddrinfo addr (string_of_int port) hints >>= function
   | [] ->
-      [%lwt die "getaddrinfo"]
+      Lwt.fail (Failure "getaddrinfo")
   | res :: _ ->
       Lwt.return res.U.ai_addr
 
@@ -414,7 +414,7 @@ let main () =
         Utp_lwt.connect ctx addr >>= fun sock ->
         let read_buf = Bytes.create !o_buf_size in
         let rec echo_loop () =
-          match%lwt Lwt_unix.read Lwt_unix.stdin read_buf 0 (Bytes.length read_buf) with
+          Lwt_unix.read Lwt_unix.stdin read_buf 0 (Bytes.length read_buf) >>= function
           | 0 ->
               debug "Read EOF from stdin; closing socket";
               Utp_lwt.close sock
