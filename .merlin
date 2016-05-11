@@ -2,4 +2,4 @@ S lib
 S bin
 B lib
 B bin
-PKG lwt lwt.ppx
+PKG lwt lwt.unix

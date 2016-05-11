@@ -301,12 +301,13 @@ let rec write sock buf off len =
   Lwt_mutex.with_lock sock.write_mutex (fun () -> loop off len)
 
 let destroy ctx =
-  if ctx.sockets = 0 then begin
-    Lwt.wakeup ctx.stop ();
-    Utp.destroy ctx.id;
-    Hashtbl.remove contexts ctx.id
-  end else begin
+  if not ctx.destroyed then begin
     ctx.destroyed <- true;
+    if ctx.sockets = 0 then begin
+      Lwt.wakeup ctx.stop ();
+      Utp.destroy ctx.id;
+      Hashtbl.remove contexts ctx.id
+    end
   end;
   ctx.loop
 
