@@ -269,16 +269,28 @@ end = struct
     ctx.sockets <- ctx.sockets + 1;
     Lwt_condition.signal ctx.accept (addr, sock)
 
+  external stub_sendto : Unix.file_descr -> Utp.buffer -> int -> int -> Unix.msg_flag list -> Unix.sockaddr -> int = "lwt_unix_bytes_sendto_byte" "lwt_unix_bytes_sendto"
+
+  let total_queued = ref 0
+
   let on_sendto id addr buf =
     really_debug "on_sendto";
     let ctx = Hashtbl.find contexts id in
-    let buf = Lwt_bytes.to_bytes buf in
-    let _ =
-      Lwt_mutex.with_lock ctx.send_mutex (fun () ->
-          Lwt_unix.sendto ctx.fd buf 0 (Bytes.length buf) [] addr
-        )
-    in
-    ()
+    if Lwt_unix.writable ctx.fd then
+      ignore (stub_sendto (Lwt_unix.unix_file_descr ctx.fd) buf 0 (Lwt_bytes.length buf) [] addr)
+    else begin
+      total_queued := !total_queued + (Lwt_bytes.length buf);
+      debug "queueing buffer: %d" !total_queued;
+      let buf = Lwt_bytes.to_bytes buf in
+      let _ =
+        Lwt_mutex.with_lock ctx.send_mutex (fun () ->
+            Lwt_unix.sendto ctx.fd buf 0 (Bytes.length buf) [] addr >>= fun _ ->
+            total_queued := !total_queued - (Bytes.length buf);
+            Lwt.return_unit
+          )
+      in
+      ()
+    end
 
   let on_error id error =
     debug "on_error";
