@@ -6,7 +6,6 @@ bug-reports: "https://www.github.com/nojb/ocaml-utp/issues"
 license: "MIT"
 dev-repo: "https://www.github.com/nojb/ocaml-utp.git"
 build: [make "all"]
-install: [make "install"]
 build-doc: [make "doc"]
 depends: ["base-bytes" "ocamlfind" {build}]
 available: [ocaml-version >= "4.02.3"]
