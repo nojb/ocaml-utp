@@ -20,7 +20,7 @@
    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE. *)
 
-let o_debug = ref 0
+let o_debug = ref 1
 
 let debug fmt =
   if !o_debug > 0 then
@@ -40,6 +40,7 @@ type state =
   | Connecting
   | Connected
   | Eof
+  | Error
   | Closing
   | Closed
 
@@ -47,6 +48,7 @@ let string_of_state = function
   | Connecting -> "Connecting"
   | Connected -> "Connected"
   | Eof -> "Eof"
+  | Error -> "Error"
   | Closing -> "Closing"
   | Closed -> "Closed"
 
@@ -56,10 +58,7 @@ type socket =
     buffers: bytes Lwt_sequence.t;
     readers: bytes Lwt.u Lwt_sequence.t;
     writable: unit Lwt_condition.t;
-    connected: unit Lwt.u;
-    on_connected: unit Lwt.t;
-    closed: unit Lwt.u;
-    on_closed: unit Lwt.t;
+    state_changed: unit Lwt_condition.t;
     write_mutex: Lwt_mutex.t;
     write_buffer: Lwt_bytes.t;
     mutable state: state;
@@ -133,7 +132,7 @@ let on_connect id =
   debug "on_connect";
   let sock = Hashtbl.find sockets id in
   sock.state <- Connected;
-  Lwt.wakeup sock.connected ()
+  Lwt_condition.broadcast sock.state_changed ()
 
 let cancel_readers sock exn =
   let readers = Lwt_sequence.fold_l (fun x l -> x :: l) sock.readers [] in
@@ -145,8 +144,7 @@ let on_close id =
   let sock = Hashtbl.find sockets id in
   sock.state <- Closed;
   cancel_readers sock End_of_file;
-  Lwt.wakeup_later sock.closed (); (* CHECK: _later is important here *)
-  safe_wakeup_exn sock.connected (Failure "connect: socket closed");
+  Lwt_condition.broadcast sock.state_changed ();
   Hashtbl.remove sockets id;
   let cid = Utp.get_context id in
   let ctx = Hashtbl.find contexts cid in
@@ -161,14 +159,14 @@ let on_eof id =
   debug "on_eof";
   let sock = Hashtbl.find sockets id in
   sock.state <- Eof;
-  cancel_readers sock End_of_file
+  cancel_readers sock End_of_file;
+  Lwt_condition.broadcast sock.state_changed ()
 
 let create_socket id state =
   let buffers = Lwt_sequence.create () in
   let readers = Lwt_sequence.create () in
   let writable = Lwt_condition.create () in
-  let on_connected, connected = Lwt.wait () in
-  let on_closed, closed = Lwt.wait () in
+  let state_changed = Lwt_condition.create () in
   let write_mutex = Lwt_mutex.create () in
   let write_buffer = Lwt_bytes.create 4096 in
   {
@@ -176,10 +174,7 @@ let create_socket id state =
     buffers;
     readers;
     writable;
-    connected;
-    on_connected;
-    closed;
-    on_closed;
+    state_changed;
     write_mutex;
     write_buffer;
     state;
@@ -226,8 +221,9 @@ let on_error id error =
     | Utp.ETIMEDOUT -> "connection timeout"
   in
   let exn = Failure err in
+  sock.state <- Error;
   cancel_readers sock exn;
-  Lwt.wakeup_exn sock.connected exn
+  Lwt_condition.broadcast sock.state_changed ()
 (* Lwt_condition.broadcast_exn sock.writable exn *)
 
 let init addr =
@@ -254,17 +250,36 @@ let connect ctx addr =
   Hashtbl.add sockets id sock;
   ctx.sockets <- ctx.sockets + 1;
   Utp.connect sock.id addr;
-  sock.on_connected >>= fun () -> Lwt.return sock
+  let t, w = Lwt.wait () in
+  let _ =
+    Lwt_condition.wait sock.state_changed >|= fun () ->
+    match sock.state with
+    | Connected -> Lwt.wakeup w ()
+    | _ -> Lwt.wakeup_exn w (Failure "Could not connect")
+  in
+  t >>= fun () -> Lwt.return sock
 
 let close (sock : socket) =
-  begin match sock.state with
-    | Connected | Eof ->
-        sock.state <- Closing;
-        Utp.close sock.id
-    | state ->
-        debug "Closing while %s" (string_of_state state)
-  end;
-  sock.on_closed
+  let rec wait w =
+    Lwt_condition.wait sock.state_changed >>= fun () ->
+    match sock.state with
+    | Closed -> Lwt.wrap2 Lwt.wakeup w ()
+    | _ -> wait w
+  in
+  match sock.state with
+  | Connecting | Error | Connected | Eof ->
+      sock.state <- Closing;
+      Lwt_condition.broadcast sock.state_changed ();
+      let t, w = Lwt.wait () in
+      let _ = wait w in
+      Utp.close sock.id;
+      t
+  | Closed ->
+      Lwt.return_unit
+  | Closing ->
+      let t, w = Lwt.wait () in
+      let _ = wait w in
+      t
 
 let accept ctx =
   Lwt_condition.wait ctx.accept
@@ -280,23 +295,29 @@ let read sock =
   | _, true ->
       Lwt.fail (Failure "read: not connected")
 
-let rec write sock buf off len =
+let write_bytes (sock : socket) buf off len =
   let rec loop off len =
     if len = 0 then
       Lwt.return_unit
-    else begin
-      let to_write = min len (Lwt_bytes.length sock.write_buffer) in
-      Lwt_bytes.blit_from_bytes buf off sock.write_buffer 0 to_write;
-      let rec loop1 off1 len1 =
-        let n = Utp.write sock.id sock.write_buffer off1 len1 in
-        if n < len1 then
-          Lwt_condition.wait sock.writable >>= fun () ->
-          loop1 (off1 + n) (len1 - n)
-        else
-          loop (off + to_write) (len - to_write)
-      in
-      loop1 0 to_write
-    end
+    else
+      let n = Utp.write sock.id buf off len in
+      if n = 0 then
+        Lwt_condition.wait sock.writable >>= fun () ->
+        loop off len
+      else
+        loop (off + n) (len - n)
+  in
+  loop off len
+
+let write sock buf off len =
+  let rec loop off len =
+    if len = 0 then
+      Lwt.return_unit
+    else
+      let n = min len (Lwt_bytes.length sock.write_buffer) in
+      Lwt_bytes.blit_from_bytes buf off sock.write_buffer 0 n;
+      write_bytes sock sock.write_buffer 0 n >>= fun () ->
+      loop (off + n) (len - n)
   in
   Lwt_mutex.with_lock sock.write_mutex (fun () -> loop off len)
 
