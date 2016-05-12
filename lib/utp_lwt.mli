@@ -20,13 +20,36 @@
    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE. *)
 
+(** [Lwt] bindings to [libutp]. *)
+
 type socket
+(** The type of UTP sockets. *)
+
 type context
+(** The type of UTP contexts.  A UTP context corresponds one-to-one to
+    underlying UDP sockets.  A context may spawn any number of sockets. *)
 
 val init: Unix.sockaddr -> context
+(** [init addr] create a context and binds it to [addr]. *)
+
 val connect: context -> Unix.sockaddr -> socket Lwt.t
+(** [connect ctx addr] connects to [addr] and returns the resulting connected
+    socket. *)
+
 val accept: context -> (Unix.sockaddr * socket) Lwt.t
+(** [accept ctx] waits for an incoming connection and, on receipt, returns the
+    connected socket and the source address. *)
+
 val read: socket -> bytes Lwt.t
+(** [read sock] returns the next chunk of data read from [sock]. *)
+
 val write: socket -> bytes -> int -> int -> unit Lwt.t
+(** [write sock buf off len] writes bytes from [buf] between [off] and [off+len]
+    to [sock]. *)
+
 val close: socket -> unit Lwt.t
+(** [close sock] closes [sock]. *)
+
 val destroy: context -> unit Lwt.t
+(** [destroy ctx] signals that the context [ctx] is no longer useful.  It will
+    be destroyed once all dependant sockets are closed. *)

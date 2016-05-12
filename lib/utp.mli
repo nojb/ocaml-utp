@@ -20,6 +20,11 @@
    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE. *)
 
+(** Low-level bindings for [libutp].
+
+    These are hard to use directly.  As such they are not documented.  Please
+    see [Utp_lwt] for a higher-level interface to [Lwt]. *)
+
 type context
 type socket
 
