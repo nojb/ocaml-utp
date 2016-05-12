@@ -1,0 +1,70 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<link rel="stylesheet" href="style.css" type="text/css">
+<meta content="text/html; charset=iso-8859-1" http-equiv="Content-Type">
+<link rel="Start" href="index.html">
+<link rel="previous" href="Utp.html">
+<link rel="Up" href="index.html">
+<link title="Index of types" rel=Appendix href="index_types.html">
+<link title="Index of values" rel=Appendix href="index_values.html">
+<link title="Index of modules" rel=Appendix href="index_modules.html">
+<link title="Utp" rel="Chapter" href="Utp.html">
+<link title="Utp_lwt" rel="Chapter" href="Utp_lwt.html"><title>Utp_lwt</title>
+</head>
+<body>
+<div class="navbar"><a class="pre" href="Utp.html" title="Utp">Previous</a>
+&nbsp;<a class="up" href="index.html" title="Index">Up</a>
+&nbsp;</div>
+<h1>Module <a href="type_Utp_lwt.html">Utp_lwt</a></h1>
+
+<pre><span class="keyword">module</span> Utp_lwt: <code class="code"><span class="keyword">sig</span></code> <a href="Utp_lwt.html">..</a> <code class="code"><span class="keyword">end</span></code></pre><div class="info module top">
+<code class="code"><span class="constructor">Lwt</span></code> bindings to <code class="code">libutp</code>.<br>
+</div>
+<hr width="100%">
+
+<pre><span id="TYPEsocket"><span class="keyword">type</span> <code class="type"></code>socket</span> </pre>
+<div class="info ">
+The type of UTP sockets.<br>
+</div>
+
+
+<pre><span id="TYPEcontext"><span class="keyword">type</span> <code class="type"></code>context</span> </pre>
+<div class="info ">
+The type of UTP contexts.  A UTP context corresponds one-to-one to
+    underlying UDP sockets.  A context may spawn any number of sockets.<br>
+</div>
+
+
+<pre><span id="VALinit"><span class="keyword">val</span> init</span> : <code class="type">Unix.sockaddr -> <a href="Utp_lwt.html#TYPEcontext">context</a></code></pre><div class="info ">
+<code class="code">init addr</code> create a context and binds it to <code class="code">addr</code>.<br>
+</div>
+
+<pre><span id="VALconnect"><span class="keyword">val</span> connect</span> : <code class="type"><a href="Utp_lwt.html#TYPEcontext">context</a> -> Unix.sockaddr -> <a href="Utp_lwt.html#TYPEsocket">socket</a> Lwt.t</code></pre><div class="info ">
+<code class="code">connect ctx addr</code> connects to <code class="code">addr</code> and returns the resulting connected
+    socket.<br>
+</div>
+
+<pre><span id="VALaccept"><span class="keyword">val</span> accept</span> : <code class="type"><a href="Utp_lwt.html#TYPEcontext">context</a> -> (Unix.sockaddr * <a href="Utp_lwt.html#TYPEsocket">socket</a>) Lwt.t</code></pre><div class="info ">
+<code class="code">accept ctx</code> waits for an incoming connection and, on receipt, returns the
+    connected socket and the source address.<br>
+</div>
+
+<pre><span id="VALread"><span class="keyword">val</span> read</span> : <code class="type"><a href="Utp_lwt.html#TYPEsocket">socket</a> -> bytes Lwt.t</code></pre><div class="info ">
+<code class="code">read sock</code> returns the next chunk of data read from <code class="code">sock</code>.<br>
+</div>
+
+<pre><span id="VALwrite"><span class="keyword">val</span> write</span> : <code class="type"><a href="Utp_lwt.html#TYPEsocket">socket</a> -> bytes -> int -> int -> unit Lwt.t</code></pre><div class="info ">
+<code class="code">write sock buf off len</code> writes bytes from <code class="code">buf</code> between <code class="code">off</code> and <code class="code">off+len</code>
+    to <code class="code">sock</code>.<br>
+</div>
+
+<pre><span id="VALclose"><span class="keyword">val</span> close</span> : <code class="type"><a href="Utp_lwt.html#TYPEsocket">socket</a> -> unit Lwt.t</code></pre><div class="info ">
+<code class="code">close sock</code> closes <code class="code">sock</code>.<br>
+</div>
+
+<pre><span id="VALdestroy"><span class="keyword">val</span> destroy</span> : <code class="type"><a href="Utp_lwt.html#TYPEcontext">context</a> -> unit Lwt.t</code></pre><div class="info ">
+<code class="code">destroy ctx</code> signals that the context <code class="code">ctx</code> is no longer useful.  It will
+    be destroyed once all dependant sockets are closed.<br>
+</div>
+</body></html>

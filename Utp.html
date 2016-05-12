@@ -1,0 +1,74 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<link rel="stylesheet" href="style.css" type="text/css">
+<meta content="text/html; charset=iso-8859-1" http-equiv="Content-Type">
+<link rel="Start" href="index.html">
+<link rel="next" href="Utp_lwt.html">
+<link rel="Up" href="index.html">
+<link title="Index of types" rel=Appendix href="index_types.html">
+<link title="Index of values" rel=Appendix href="index_values.html">
+<link title="Index of modules" rel=Appendix href="index_modules.html">
+<link title="Utp" rel="Chapter" href="Utp.html">
+<link title="Utp_lwt" rel="Chapter" href="Utp_lwt.html"><title>Utp</title>
+</head>
+<body>
+<div class="navbar">&nbsp;<a class="up" href="index.html" title="Index">Up</a>
+&nbsp;<a class="post" href="Utp_lwt.html" title="Utp_lwt">Next</a>
+</div>
+<h1>Module <a href="type_Utp.html">Utp</a></h1>
+
+<pre><span class="keyword">module</span> Utp: <code class="code"><span class="keyword">sig</span></code> <a href="Utp.html">..</a> <code class="code"><span class="keyword">end</span></code></pre><div class="info module top">
+Low-level bindings for <code class="code">libutp</code>.
+<p>
+
+    These are hard to use directly.  As such they are not documented.  Please
+    see <code class="code"><span class="constructor">Utp_lwt</span></code> for a higher-level interface to <code class="code"><span class="constructor">Lwt</span></code>.<br>
+</div>
+<hr width="100%">
+
+<pre><span id="TYPEcontext"><span class="keyword">type</span> <code class="type"></code>context</span> </pre>
+
+
+<pre><span id="TYPEsocket"><span class="keyword">type</span> <code class="type"></code>socket</span> </pre>
+
+
+<pre><span id="TYPEbuffer"><span class="keyword">type</span> <code class="type"></code>buffer</span> = <code class="type">(char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t</code> </pre>
+
+
+<pre><code><span id="TYPEerror"><span class="keyword">type</span> <code class="type"></code>error</span> = </code></pre><table class="typetable">
+<tr>
+<td align="left" valign="top" >
+<code><span class="keyword">|</span></code></td>
+<td align="left" valign="top" >
+<code><span id="TYPEELTerror.ECONNREFUSED"><span class="constructor">ECONNREFUSED</span></span></code></td>
+
+</tr>
+<tr>
+<td align="left" valign="top" >
+<code><span class="keyword">|</span></code></td>
+<td align="left" valign="top" >
+<code><span id="TYPEELTerror.ECONNRESET"><span class="constructor">ECONNRESET</span></span></code></td>
+
+</tr>
+<tr>
+<td align="left" valign="top" >
+<code><span class="keyword">|</span></code></td>
+<td align="left" valign="top" >
+<code><span id="TYPEELTerror.ETIMEDOUT"><span class="constructor">ETIMEDOUT</span></span></code></td>
+
+</tr></table>
+
+
+
+<pre><span id="VALinit"><span class="keyword">val</span> init</span> : <code class="type">unit -> <a href="Utp.html#TYPEcontext">context</a></code></pre>
+<pre><span id="VALset_debug"><span class="keyword">val</span> set_debug</span> : <code class="type"><a href="Utp.html#TYPEcontext">context</a> -> bool -> unit</code></pre>
+<pre><span id="VALcreate_socket"><span class="keyword">val</span> create_socket</span> : <code class="type"><a href="Utp.html#TYPEcontext">context</a> -> <a href="Utp.html#TYPEsocket">socket</a></code></pre>
+<pre><span id="VALconnect"><span class="keyword">val</span> connect</span> : <code class="type"><a href="Utp.html#TYPEsocket">socket</a> -> Unix.sockaddr -> unit</code></pre>
+<pre><span id="VALwrite"><span class="keyword">val</span> write</span> : <code class="type"><a href="Utp.html#TYPEsocket">socket</a> -> <a href="Utp.html#TYPEbuffer">buffer</a> -> int -> int -> int</code></pre>
+<pre><span id="VALclose"><span class="keyword">val</span> close</span> : <code class="type"><a href="Utp.html#TYPEsocket">socket</a> -> unit</code></pre>
+<pre><span id="VALprocess_udp"><span class="keyword">val</span> process_udp</span> : <code class="type"><a href="Utp.html#TYPEcontext">context</a> -> Unix.sockaddr -> <a href="Utp.html#TYPEbuffer">buffer</a> -> int -> int -> bool</code></pre>
+<pre><span id="VALcheck_timeouts"><span class="keyword">val</span> check_timeouts</span> : <code class="type"><a href="Utp.html#TYPEcontext">context</a> -> unit</code></pre>
+<pre><span id="VALissue_deferred_acks"><span class="keyword">val</span> issue_deferred_acks</span> : <code class="type"><a href="Utp.html#TYPEcontext">context</a> -> unit</code></pre>
+<pre><span id="VALget_context"><span class="keyword">val</span> get_context</span> : <code class="type"><a href="Utp.html#TYPEsocket">socket</a> -> <a href="Utp.html#TYPEcontext">context</a></code></pre>
+<pre><span id="VALdestroy"><span class="keyword">val</span> destroy</span> : <code class="type"><a href="Utp.html#TYPEcontext">context</a> -> unit</code></pre></body></html>
