@@ -20,7 +20,7 @@
    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE. *)
 
-let o_debug = ref 1
+let o_debug = ref 0
 
 let debug fmt =
   if !o_debug > 0 then

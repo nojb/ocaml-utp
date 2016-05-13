@@ -8,6 +8,13 @@ OCAMLMKLIB = ocamlmklib
 OCAMLDOC = ocamldoc
 STDLIB_DIR = `$(OCAMLC) -where`
 LWT_DIR = `$(OCAMLFIND) query lwt`
+LRT =
+
+# Needed for clock_gettime
+lrt := $(shell echo 'int main() {}' | $(CC) -xc -o /dev/null - -lrt >/dev/null 2>&1; echo $$?)
+ifeq ($(strip $(lrt)),0)
+  LRT = -lrt
+endif
 
 all: ucat ucat.opt
 
@@ -32,7 +39,7 @@ $(LIB_DIR)utp_lwt.cmx: $(LIB_DIR)utp.mli $(LIB_DIR)utp_lwt.mli $(LIB_DIR)utp_lwt
 	$(OCAMLOPT) -g -bin-annot -I $(LIB_DIR) -I $(LWT_DIR) -o $@ -c $^
 
 utp.cma utp.cmxa libutp.a utp.a: $(addprefix $(LIBUTP_DIR),$(LIBUTP_OBJS)) $(LIB_DIR)utpstubs.o $(LIB_DIR)utp.cmo $(LIB_DIR)utp.cmx
-	$(OCAMLMKLIB) -custom -o utp $^ -lstdc++
+	$(OCAMLMKLIB) -custom -o utp $^ -lstdc++ $(LRT)
 
 utp-lwt.cma: utp.cma $(LIB_DIR)utp_lwt.cmo
 	$(OCAMLC) -a -o $@ $^
