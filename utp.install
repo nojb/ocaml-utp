@@ -1,21 +1,26 @@
 lib: [
-  "META" {"META"}
-  "libutp.a" {"libutp.a"}
-  "lib/utp.mli" {"utp.mli"}
-  "lib/utp.cmi" {"utp.cmi"}
-  "utp.cma" {"utp.cma"}
-  "utp.cmxa" {"utp.cmxa"}
-  "utp-lwt.cma" {"utp-lwt.cma"}
-  "utp-lwt.a" {"utp-lwt.a"}
-  "utp-lwt.cmxa" {"utp-lwt.cmxa"}
-  "lib/utp_lwt.cmi" {"utp_lwt.cmi"}
-  "lib/utp_lwt.mli" {"utp_lwt.mli"}
-  "utp.a" {"utp.a"}
-]
-bin: [
-  "ucat" {"ucat"}
-  "ucat.opt" {"ucat.opt"}
+  "_build/install/default/lib/utp/META" {"META"}
+  "_build/install/default/lib/utp/opam" {"opam"}
+  "_build/install/default/lib/utp/utp.cmi"
+  "_build/install/default/lib/utp/utp.cmx"
+  "_build/install/default/lib/utp/utp.cmt"
+  "_build/install/default/lib/utp/utp.cmti"
+  "_build/install/default/lib/utp/utp.mli"
+  "_build/install/default/lib/utp/utp_lwt.cmi"
+  "_build/install/default/lib/utp/utp_lwt.cmx"
+  "_build/install/default/lib/utp/utp_lwt.cmt"
+  "_build/install/default/lib/utp/utp_lwt.cmti"
+  "_build/install/default/lib/utp/utp_lwt.mli"
+  "_build/install/default/lib/utp/utp.cma"
+  "_build/install/default/lib/utp/libutp_stubs.a"
+  "_build/install/default/lib/utp/utp.cmxa"
+  "_build/install/default/lib/utp/utp.a"
+  "_build/install/default/lib/utp/utp.cmxs"
 ]
 doc: [
-  "README.md" {"README.md"}
+  "_build/install/default/doc/utp/README.md"
+  "_build/install/default/doc/utp/LICENSE"
+]
+stublibs: [
+  "_build/install/default/lib/stublibs/dllutp_stubs.so"
 ]

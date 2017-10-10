@@ -1,12 +1,2 @@
-*.so
-*.a
-*.cma
-*.o
-*.cmxa
-*.cmi
-*.cmo
-*.cmx
-*.cmt
-*.cmti
-ucat
-ucat.opt
+_build
+.merlin
