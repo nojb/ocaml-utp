@@ -105,7 +105,7 @@ let main () =
 
   lookup !o_local_address !o_local_port >>= fun addr ->
 
-  let ctx = Utp_lwt.init addr in
+  Utp_lwt.init addr >>= fun ctx ->
 
   (* if !o_debug >= 2 then *)
   (*   Utp.set_debug ctx true; *)
@@ -126,8 +126,8 @@ let main () =
         in
         echo_loop ()
     | true ->
-        lookup !o_local_address !o_local_port >>= fun addr ->
-        Utp_lwt.accept ctx >>= fun (addr, sock) ->
+        lookup !o_local_address !o_local_port >>= fun _addr ->
+        Utp_lwt.accept ctx >>= fun (_addr, sock) ->
         let rec loop: 'a. 'a -> _ Lwt.t = fun _ ->
           Lwt.try_bind
             (fun () ->

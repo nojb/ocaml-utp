@@ -10,4 +10,5 @@
   (cxx_flags (-Wno-sign-compare -fpermissive -fno-rtti))
   (c_names (utp_stubs))
   (cxx_names (utp_api utp_callbacks utp_hash utp_internal utp_packedsockaddr utp_utils))
+  (c_library_flags (-lstdc++))
   (libraries (bytes lwt))))

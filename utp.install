@@ -17,6 +17,9 @@ lib: [
   "_build/install/default/lib/utp/utp.a"
   "_build/install/default/lib/utp/utp.cmxs"
 ]
+bin: [
+  "_build/install/default/bin/ucat" {"ucat"}
+]
 doc: [
   "_build/install/default/doc/utp/README.md"
   "_build/install/default/doc/utp/LICENSE"
