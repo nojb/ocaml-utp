@@ -29,7 +29,7 @@ type context
 (** The type of UTP contexts.  A UTP context corresponds one-to-one to
     underlying UDP sockets.  A context may spawn any number of sockets. *)
 
-val init: Unix.sockaddr -> context
+val init: Unix.sockaddr -> context Lwt.t
 (** [init addr] create a context and binds it to [addr]. *)
 
 val connect: context -> Unix.sockaddr -> socket Lwt.t

@@ -44,14 +44,6 @@ type state =
   | Closing
   | Closed
 
-let string_of_state = function
-  | Connecting -> "Connecting"
-  | Connected -> "Connected"
-  | Eof -> "Eof"
-  | Error -> "Error"
-  | Closing -> "Closing"
-  | Closed -> "Closed"
-
 type socket =
   {
     id: Utp.socket;
@@ -81,12 +73,6 @@ let contexts = Hashtbl.create 2
 
 let safe s f x =
   Lwt.catch f (fun e -> debug "%s: unexpected exn: %s" s (Printexc.to_string e); x)
-
-let safe_wakeup w x =
-  try Lwt.wakeup w x with Invalid_argument _ -> ()
-
-let safe_wakeup_exn w exn =
-  try Lwt.wakeup_exn w exn with Invalid_argument _ -> ()
 
 let read_loop stopper fd id =
   let buf = Lwt_bytes.create 4096 in
@@ -228,7 +214,7 @@ let on_error id error =
 
 let init addr =
   let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_DGRAM 0 in
-  Lwt_unix.bind fd addr;
+  Lwt_unix.bind fd addr >>= fun () ->
   let send_mutex = Lwt_mutex.create () in
   let accept = Lwt_condition.create () in
   let id = Utp.init () in
@@ -242,7 +228,7 @@ let init addr =
   let ctx = {id; fd; accept; send_mutex; loop; sockets = 0; destroyed = false; stop} in
   Hashtbl.add contexts id ctx;
   Lwt.wakeup start ();
-  ctx
+  Lwt.return ctx
 
 let connect ctx addr =
   let id = Utp.create_socket ctx.id in

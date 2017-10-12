@@ -69,7 +69,7 @@
 	typedef SSIZE_T ssize_t;
 #endif
 
-#ifdef POSIX
+#if defined(POSIX) || defined(__APPLE__)
 	typedef struct sockaddr_storage SOCKADDR_STORAGE;
 #endif
 
